@@ -1,0 +1,179 @@
+# MCP File Server - Change Log & Decision History
+
+**Purpose:** This log tracks significant changes, architectural decisions, and their rationale. Unlike git commits, this focuses on the "why" behind changes and provides context for future development decisions.
+
+**Format:** Each entry should include Date, Change Type, Description, Rationale, and Impact.
+
+---
+
+## 2025-08-31
+
+### [INIT] Project Initialization and Foundational Setup
+**Type:** Architecture  
+**Change:** Established initial project structure and documentation framework  
+**Rationale:** 
+- Created comprehensive cloudmd system for maintaining rich context throughout development
+- Chose MCP File Server focus based on directory name and current ecosystem needs
+- Implemented structured documentation approach to reduce cognitive load in future AI interactions
+
+**Impact:** 
+- Established foundation for systematic development approach
+- Created templates and strategies for maintaining project context
+- Set up framework for decision tracking and architectural evolution
+
+**Files Created:**
+- `cloudmd` - Main project context file
+- `subfolder-cloudmd-strategy.md` - Documentation strategy
+- `change.log` - This decision tracking file
+
+**Key Decisions Made:**
+1. **Technology Stack:** Node.js/TypeScript with MCP SDK
+   - **Why:** Official MCP support, strong typing, excellent async I/O
+   - **Alternatives Considered:** Python, Rust, Go
+   - **Trade-offs:** JavaScript ecosystem vs. performance (chose ecosystem maturity)
+
+2. **Documentation Strategy:** Granular cloudmd files per module
+   - **Why:** Reduces cognitive load, provides instant context
+   - **Maintenance Cost:** Higher upfront, lower long-term cognitive cost
+   - **Success Metrics:** Development velocity, context accuracy
+
+3. **Security-First Architecture:** Security considerations from project start
+   - **Why:** File system access requires paranoid security approach
+   - **Impact:** All modules designed with security validation layers
+   - **Implementation:** Path validation, authentication, authorization built-in
+
+---
+
+## Template for Future Entries
+
+### [DATE] [CHANGE_TYPE] Brief Description
+**Type:** [Architecture|Feature|Bug Fix|Refactor|Performance|Security|Documentation]  
+**Change:** Detailed description of what was changed  
+**Rationale:** Why this change was necessary, what problem it solves  
+**Impact:** How this affects the codebase, performance, maintainability  
+**Files Affected:** List of modified files  
+**Related Issues:** Any GitHub issues, bugs, or feature requests  
+**Migration Notes:** Any breaking changes or migration requirements  
+**Rollback Plan:** How to revert if needed  
+
+---
+
+## Change Categories & Guidelines
+
+### Architecture Changes
+- Major structural modifications
+- Technology stack changes
+- Design pattern adoptions
+- Module boundary changes
+
+### Feature Changes
+- New functionality additions
+- API modifications
+- User-facing changes
+- Integration implementations
+
+### Security Changes
+- Vulnerability fixes
+- Security enhancement implementations
+- Authentication/authorization modifications
+- Audit trail improvements
+
+### Performance Changes
+- Optimization implementations
+- Memory usage improvements
+- I/O efficiency enhancements
+- Scaling modifications
+
+### Refactoring Changes
+- Code organization improvements
+- Design pattern implementations
+- Debt reduction efforts
+- Maintainability enhancements
+
+## Best Practices for Change Logging
+
+### When to Log
+- **Always Log:** Architecture decisions, security changes, breaking changes
+- **Usually Log:** New features, significant refactoring, performance optimizations
+- **Sometimes Log:** Bug fixes that reveal design issues, dependency updates with impact
+- **Rarely Log:** Minor bug fixes, cosmetic changes, routine maintenance
+
+### What to Include
+1. **Context:** What was the situation before this change?
+2. **Problem:** What issue were you trying to solve?
+3. **Solution:** What approach did you take and why?
+4. **Alternatives:** What other options were considered?
+5. **Trade-offs:** What are the pros/cons of this decision?
+6. **Future Impact:** How might this affect future development?
+
+### Writing Guidelines
+- **Be Specific:** Include exact details, not just general descriptions
+- **Include Rationale:** Always explain the "why" behind decisions
+- **Think Future:** Write for developers who will work on this in 6 months
+- **Link Context:** Reference related files, issues, or documentation
+- **Update Regularly:** Don't batch changes; log them as they happen
+
+## Decision Review Process
+
+### Monthly Reviews
+- Review previous month's changes for patterns
+- Identify decisions that didn't work out as expected
+- Update architectural guidelines based on learnings
+- Plan improvements for recurring issues
+
+### Quarterly Assessments
+- Evaluate major architectural decisions
+- Assess impact of technology choices
+- Review security implementation effectiveness
+- Plan technical debt reduction
+
+### Annual Architecture Reviews
+- Complete system architecture assessment
+- Technology stack evaluation and potential updates
+- Long-term roadmap alignment with decisions
+- Major refactoring or modernization planning
+
+## Integration with Development Workflow
+
+### Pre-Development
+1. Review change.log for relevant context
+2. Check for related previous decisions
+3. Understand impact of planned changes
+
+### During Development
+1. Document significant decisions as they're made
+2. Note unexpected challenges or discoveries
+3. Record rationale for implementation choices
+
+### Post-Development
+1. Update change.log with final implementation details
+2. Record lessons learned and future considerations
+3. Update related documentation (cloudmd files)
+
+### Code Review Process
+1. Reviewer checks if significant changes are logged
+2. Validate rationale makes sense in project context
+3. Suggest improvements to decision documentation
+
+## Maintenance and Evolution
+
+### Change Log Health Metrics
+- **Completeness:** Are all major decisions documented?
+- **Clarity:** Can future developers understand the rationale?
+- **Relevance:** Are old decisions still valid or need updating?
+- **Accessibility:** Is the information easy to find and understand?
+
+### Continuous Improvement
+- Regularly review and improve logging templates
+- Gather feedback on documentation usefulness
+- Evolve categories and guidelines based on project needs
+- Integrate with other project documentation systems
+
+---
+
+**Log Maintenance:** This file should be updated immediately when significant changes are made, not batched or delayed. The goal is to capture decision-making context while it's fresh and complete.
+
+**Review Schedule:** 
+- Weekly: Check that recent changes are properly logged
+- Monthly: Review decision patterns and update guidelines
+- Quarterly: Assess overall decision quality and outcomes
