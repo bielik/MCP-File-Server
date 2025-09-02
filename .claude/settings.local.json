@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebSearch",
+      "WebSearch",
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(rmdir:*)",
+      "Bash(npm run install:all:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c:*)",
+      "Bash(timeout:*)",
+      "Bash(tsx:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm install:*)",
+      "Bash(cmd /c:*)",
+      "Bash(npx tsc:*)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Bash(npx playwright:*)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots/**)",
+      "Read(c:\\Users\\MartinBielik\\OneDrive - Decoding Spaces GbR\\Pictures\\Screenshots\\**)",
+      "Bash(wmic process where processid=11776 delete:*)",
+      "Bash(wmic process where:*)",
+      "Bash(git add:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

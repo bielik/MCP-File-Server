@@ -22,7 +22,7 @@
 - Set up framework for decision tracking and architectural evolution
 
 **Files Created:**
-- `cloudmd` - Main project context file
+- `claude.md` - Main project context file (renamed from cloudmd)
 - `subfolder-cloudmd-strategy.md` - Documentation strategy
 - `change.log` - This decision tracking file
 
@@ -41,6 +41,204 @@
    - **Why:** File system access requires paranoid security approach
    - **Impact:** All modules designed with security validation layers
    - **Implementation:** Path validation, authentication, authorization built-in
+
+---
+
+## 2025-09-01
+
+### [ARCHITECTURE] Multimodal Research Assistant Final Design
+**Type:** Architecture  
+**Change:** Redesigned from generic MCP file server to specialized multimodal research proposal assistant  
+**Rationale:** 
+- User clarified specific use case: research proposal and paper writing assistance
+- Research documents require visual content processing (diagrams, charts, figures)
+- Academic workflows need structured permission systems and agent file organization
+- Multilingual support essential for international research collaboration
+
+**Impact:**
+- Complete technology stack change to support multimodal capabilities
+- Added sophisticated document processing pipeline
+- Introduced agent-controlled file creation with subfolder management
+- Enhanced search from simple keyword to three-mode search system
+
+**Files Affected:**
+- `claude.md` - Complete rewrite with multimodal architecture  
+- `plan.md` - Updated with final implementation phases
+- Project scope expanded significantly
+
+**Key Technology Decisions:**
+1. **Multimodal Embeddings:** M-CLIP for text + image processing
+   - **Why:** Research documents contain critical visual information often without captions
+   - **Alternatives:** Text-only embeddings (insufficient for research needs)
+   - **Trade-offs:** Higher complexity vs. comprehensive content access
+
+2. **Agent Choice Search Strategy:** Separate MCP tools for different search modes
+   - **Why:** AI agents understand query intent better than heuristic classification
+   - **Implementation:** `search_text`, `search_semantic`, `search_multimodal` tools
+   - **Benefits:** Flexibility, simplicity, performance optimization by agents
+
+3. **Document Processing Stack:** LlamaIndex + Docling + Qdrant
+   - **Why:** Leverage proven tools instead of building custom solutions
+   - **LlamaIndex:** Orchestration and chunking expertise
+   - **Docling:** Superior PDF parsing with image extraction
+   - **Qdrant:** High-performance local vector database
+
+4. **Three-Tier Permission System:** Context/Working/Output folder structure
+   - **Why:** Matches research workflow patterns perfectly
+   - **Context:** Read-only reference materials (funding docs, policies)
+   - **Working:** Editable proposal sections and drafts
+   - **Output:** Agent-controlled creation with subfolder rights
+
+5. **Local-First Architecture:** No cloud dependencies for core functionality
+   - **Why:** Research data privacy, performance, reliability, cost control
+   - **Implementation:** Local Qdrant, local M-CLIP, local file processing
+   - **Future:** Can add cloud deployment options later
+
+**UI/UX Decisions:**
+1. **Dual View System:** File explorer + filtered list views
+   - **File Explorer:** Folder tree with drag-and-drop permission assignment
+   - **List View:** Advanced filtering by permissions, type, date, size
+   - **Why:** Supports both hierarchical organization and flat searching
+
+2. **Real-time Updates:** WebSocket integration for live file system changes
+   - **Why:** Multiple agents and users may modify files simultaneously
+   - **Implementation:** chokidar file monitoring + WebSocket broadcasting
+
+**Search Architecture Decisions:**
+1. **FlexSearch:** Fast keyword/phrase matching with multilingual support
+2. **M-CLIP Semantic:** Conceptual queries using text embeddings
+3. **M-CLIP Cross-Modal:** Text→image and image→text search capabilities
+4. **Agent Selection:** No automatic routing - agents choose appropriate tool
+
+**Migration Notes:**
+- Previous generic file server concepts completely replaced
+- All documentation updated to reflect multimodal research focus
+- Technology stack expanded significantly (M-CLIP, Docling, LlamaIndex, Qdrant)
+
+**Rollback Plan:**
+- Can simplify to text-only version by removing M-CLIP image processing
+- Can reduce to basic file server by removing search capabilities
+- Modular architecture supports incremental rollback
+
+---
+
+## 2025-09-02
+
+### [UI/UX] Permission System Redesign & Visual Indicator Implementation
+**Type:** Feature + Bug Fix + UI/UX  
+**Change:** Complete redesign of permission management interface and resolution of backend-frontend permission type inconsistencies  
+
+**Rationale:** 
+- User requested removal of non-functional drag & drop assignment areas and redundant modal dialogs
+- Need for clear visual indicators showing current permission status for files and folders
+- Critical bug where permission indicators showed gray dots instead of correct colors due to type mismatches
+- Backend was returning 'read-only'/'read-write'/'agent-controlled' while frontend expected 'context'/'working'/'output'
+
+**Impact:**
+- **UI Significantly Cleaner**: Removed redundant "Manage Permissions" modal and non-functional drag & drop zones
+- **Visual Clarity**: Permission dots now correctly display Blue (context), Green (working), Purple (output)
+- **Left-positioned Indicators**: Permission dots appear before folder/file icons for immediate visibility
+- **Backend-Frontend Consistency**: All permission types now use unified 'context'/'working'/'output' naming
+- **Real-time Accuracy**: Permission changes in Configuration tab immediately reflect in File Explorer
+
+**Files Affected:**
+- `frontend/src/components/FileExplorer.tsx` - Removed redundant UI elements, added permission dots
+- `backend/files/permissions.ts` - Fixed permission type returns and async import compatibility
+- `backend/types/index.ts` - Updated FilePermission type definition
+- `backend/server/web-server.ts` - Fixed async permission calls in API endpoints
+- `README.md` - Updated with correct server ports and current implementation status
+- `plan.md` - Marked Phase 1 as complete with detailed achievements
+
+**Key Technical Fixes:**
+
+1. **Permission Type Consistency**
+   - **Before**: Backend returned 'read-only', frontend expected 'context'
+   - **After**: Unified 'context'/'working'/'output' naming throughout codebase
+   - **Files**: `permissions.ts`, `types/index.ts`, all related modules
+
+2. **Async Import Bug Resolution**
+   - **Problem**: ES module context `require('path')` caused "require is not defined" errors
+   - **Solution**: Replaced with `await import('path')` and made functions async
+   - **Impact**: Fixed critical permission checking failures in `/api/filesystem/browse` endpoint
+
+3. **UI Component Cleanup**
+   - **Removed**: Non-functional drag & drop zones for permission assignment
+   - **Removed**: Redundant "Manage Permissions" button and modal dialog
+   - **Added**: Inline permission indicator dots positioned leftmost before file icons
+   - **Enhanced**: Real-time WebSocket synchronization between Configuration and File Explorer
+
+**API Endpoint Fixes:**
+- **Before**: `/api/filesystem/browse` returned `"permissions":null` due to async import errors
+- **After**: Correctly returns `"permissions":"context"` for configured folders
+- **Debug Logging**: Added comprehensive permission matching traces for troubleshooting
+
+**User Experience Improvements:**
+- **Permission Assignment**: Clean Configuration tab with drag-and-drop folder management
+- **Visual Feedback**: Immediate color-coded permission status for all files/folders
+- **Interface Clarity**: Removed confusing UI elements, focused on essential functionality
+- **Real-time Updates**: Changes in Configuration instantly visible in File Explorer
+
+**Testing Validated:**
+- ✅ Contacts folder correctly shows blue dot (context permission)
+- ✅ Configuration changes immediately sync to File Explorer
+- ✅ WebSocket connections stable between frontend and backend
+- ✅ All permission types display correct colors and positioning
+- ✅ Backend API returns consistent permission naming
+
+**Architecture Decisions:**
+
+1. **Permission Indicator Positioning**: Left-side placement for immediate visual scanning
+   - **Why**: Users scan left-to-right, permission status should be first visual element
+   - **Implementation**: CSS flexbox with permission dot as first child element
+
+2. **Color Coding Strategy**: Intuitive color association for permission types
+   - **Context (Blue)**: Information/reference association
+   - **Working (Green)**: Active/editable status
+   - **Output (Purple)**: Special/agent-controlled designation
+
+3. **Real-time Synchronization**: WebSocket-based updates for configuration changes
+   - **Why**: Multiple tabs/users may modify permissions simultaneously
+   - **Implementation**: Broadcast permission updates via WebSocket to all connected clients
+
+**Performance Impact:**
+- **Positive**: Removed unnecessary React components and modal rendering
+- **Positive**: Async imports resolve faster than synchronous requires in ES modules
+- **Neutral**: Permission dot rendering adds minimal overhead
+- **Positive**: Eliminated redundant API calls from removed UI components
+
+**Security Considerations:**
+- **Enhanced**: Improved path validation through async import compatibility
+- **Maintained**: All existing permission validation and sandboxing
+- **Improved**: Better error handling and logging for security audit trails
+
+**Migration Notes:**
+- **Breaking Change**: Permission API responses now use 'context'/'working'/'output' instead of old names
+- **UI Changes**: Removed drag & drop zones and "Manage Permissions" modal
+- **Configuration**: Existing user-settings.json files remain compatible
+- **Backward Compatibility**: MCP tools continue to work with updated permission types
+
+**Future Considerations:**
+- Permission dots could be made configurable (position, colors, visibility)
+- Additional permission types could be easily added with current architecture
+- UI framework supports future enhancements without major refactoring
+
+**Rollback Plan:**
+- Revert `FilePermission` type to old values if MCP integration issues arise
+- Restore modal dialogs if users request more detailed permission management
+- Can temporarily disable permission dots while maintaining functionality
+
+**Phase 1 Completion Assessment:**
+This change represents the completion of Phase 1 objectives:
+- ✅ Clean, functional file permission management interface
+- ✅ Real-time synchronization between configuration and file explorer
+- ✅ Complete three-tier permission system working end-to-end
+- ✅ Solid foundation for Phase 2 multimodal features
+
+**Developer Experience Improvements:**
+- **Debugging**: Comprehensive console logging for permission matching
+- **Type Safety**: Complete TypeScript coverage with no type mismatches
+- **Code Quality**: Eliminated redundant components and improved maintainability
+- **Documentation**: Updated README, plan, and change log with current status
 
 ---
 
