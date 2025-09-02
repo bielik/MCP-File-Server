@@ -1,0 +1,51 @@
+[
+  {
+    "question": "What is the capital of France?",
+    "contexts": [
+      "France is a country in Western Europe.",
+      "Paris is the capital and most populous city of France."
+    ],
+    "answer": "The capital of France is Paris.",
+    "ground_truth": "Paris"
+  },
+  {
+    "question": "How does photosynthesis work?",
+    "contexts": [
+      "Photosynthesis is the process by which plants convert light energy into chemical energy.",
+      "During photosynthesis, plants use sunlight, carbon dioxide, and water to produce glucose and oxygen.",
+      "Chlorophyll in plant leaves captures sunlight for the photosynthesis process."
+    ],
+    "answer": "Photosynthesis is the process where plants use sunlight, carbon dioxide, and water to create glucose and oxygen, with chlorophyll capturing the light energy.",
+    "ground_truth": "Photosynthesis converts light energy to chemical energy using sunlight, CO2, and water to produce glucose and oxygen."
+  },
+  {
+    "question": "What causes earthquakes?",
+    "contexts": [
+      "Earthquakes are caused by the sudden movement of tectonic plates in the Earth's crust.",
+      "The Earth's crust is made up of several large plates that move slowly over time.",
+      "When these plates get stuck and then suddenly slip, they release energy in the form of seismic waves."
+    ],
+    "answer": "Earthquakes are caused by the sudden movement and slipping of tectonic plates in the Earth's crust, which releases energy as seismic waves.",
+    "ground_truth": "Earthquakes result from sudden movement of tectonic plates releasing seismic energy."
+  },
+  {
+    "question": "What is artificial intelligence?",
+    "contexts": [
+      "Artificial Intelligence (AI) refers to computer systems that can perform tasks typically requiring human intelligence.",
+      "AI systems can learn, reason, and make decisions based on data and algorithms.",
+      "Machine learning is a subset of AI that enables systems to learn from data without explicit programming."
+    ],
+    "answer": "Artificial Intelligence is computer systems that perform human-like tasks such as learning, reasoning, and decision-making using data and algorithms.",
+    "ground_truth": "AI refers to computer systems that simulate human intelligence through learning, reasoning, and decision-making."
+  },
+  {
+    "question": "How do vaccines work?",
+    "contexts": [
+      "Vaccines work by training the immune system to recognize and fight specific diseases.",
+      "They contain weakened or dead parts of the disease-causing organism or blueprints for making such parts.",
+      "When vaccinated, the immune system produces antibodies and remembers how to fight the disease in the future."
+    ],
+    "answer": "Vaccines train the immune system by exposing it to weakened disease parts, causing the body to produce antibodies and develop immunity for future protection.",
+    "ground_truth": "Vaccines stimulate immune response by introducing weakened pathogens, creating antibodies and immunological memory."
+  }
+]

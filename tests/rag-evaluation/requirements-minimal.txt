@@ -1,0 +1,27 @@
+# Minimal RAG Evaluation Dependencies (No PyTorch)
+
+# Core packages without heavy ML dependencies
+requests>=2.31.0
+pandas>=2.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# HuggingFace for dataset access (no model dependencies)
+huggingface-hub>=0.17.0
+datasets>=2.14.0
+
+# Text processing
+nltk>=3.8
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+typer>=0.9.0
+
+# API & Web
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Development
+pytest>=7.4.0
+black>=23.0.0

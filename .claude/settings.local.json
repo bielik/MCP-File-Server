@@ -33,7 +33,21 @@
       "Bash(wmic process where processid=11776 delete:*)",
       "Bash(wmic process where:*)",
       "Bash(git add:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(python:*)",
+      "Bash(./python-env/Scripts/python.exe -m pip install --upgrade pip)",
+      "Bash(./python-env/Scripts/python.exe -m pip install ragas datasets transformers sentence-transformers beir pandas numpy)",
+      "Bash(./python-env/Scripts/python.exe -c \"import ragas; print(''RAGAS version:'', ragas.__version__)\")",
+      "Bash(./python-env/Scripts/python.exe -m pip install --no-deps ragas==0.3.2)",
+      "Bash(./python-env/Scripts/python.exe -m pip install datasets transformers sentence-transformers --no-warn-script-location)",
+      "Bash(./python-env/Scripts/python.exe -m pip install -r requirements-minimal.txt)",
+      "Bash(./python-env/Scripts/python.exe -m pip install:*)",
+      "Bash(npm test)",
+      "Bash(./python-env/Scripts/python.exe python/evaluation_service.py)",
+      "Bash(npm run download:*)",
+      "Bash(./python-env/Scripts/python.exe -c \"import ragas; print(''RAGAS version:'', ragas.__version__)\")",
+      "Bash(./python-env/Scripts/python.exe python/ragas_service.py)",
+      "Bash(npm run health:*)"
     ],
     "deny": [],
     "ask": []

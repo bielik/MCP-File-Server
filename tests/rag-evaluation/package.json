@@ -1,0 +1,34 @@
+{
+  "name": "mcp-rag-evaluation",
+  "version": "1.0.0",
+  "description": "RAG evaluation framework for MCP Research File Server",
+  "type": "module",
+  "main": "scripts/evaluation-bridge.ts",
+  "scripts": {
+    "start": "python-env/Scripts/python.exe python/ragas_service.py",
+    "test": "node test-ragas-mcp.js",
+    "test-mcp": "node test-ragas-mcp.js",
+    "download": "tsx scripts/evaluation-bridge.ts download",
+    "evaluate": "tsx scripts/evaluation-bridge.ts evaluate", 
+    "pipeline": "tsx scripts/evaluation-bridge.ts pipeline",
+    "setup": "npm install && python-env/Scripts/python.exe -m pip install -r requirements-minimal.txt",
+    "health": "curl -s http://127.0.0.1:8001/health | python -m json.tool"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "rag",
+    "evaluation", 
+    "mcp",
+    "multimodal",
+    "testing"
+  ],
+  "author": "MCP Research Team",
+  "license": "MIT"
+}

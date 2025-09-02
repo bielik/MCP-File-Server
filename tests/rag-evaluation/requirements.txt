@@ -1,0 +1,64 @@
+# RAG Evaluation Framework Dependencies
+
+# Core RAG Evaluation
+ragas>=0.1.0
+datasets>=2.14.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+
+# BEIR Benchmark
+beir>=2.0.0
+
+# Data Processing & Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Machine Learning & NLP
+torch>=2.0.0
+scikit-learn>=1.3.0
+nltk>=3.8
+spacy>=3.6.0
+
+# Embeddings & Vector Processing  
+faiss-cpu>=1.7.4
+qdrant-client>=1.6.0
+
+# HuggingFace Integration
+huggingface-hub>=0.17.0
+accelerate>=0.20.0
+
+# Progress & Logging
+tqdm>=4.65.0
+wandb>=0.15.0
+loguru>=0.7.0
+
+# Web & API
+requests>=2.31.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Visualization & Reporting
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.15.0
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+typer>=0.9.0
+
+# Development & Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+isort>=5.12.0
+
+# Multimodal Processing (M-CLIP)
+Pillow>=10.0.0
+opencv-python>=4.8.0
+torchvision>=0.15.0
+
+# Optional: Advanced Features
+# openai>=1.0.0  # For OpenAI API-based evaluation
+# anthropic>=0.3.0  # For Claude API-based evaluation

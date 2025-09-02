@@ -1,0 +1,33 @@
+# Python virtual environment
+python-env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node modules  
+node_modules/
+
+# Environment files with secrets
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+
+# Dataset downloads (can be regenerated)
+*/datasets/*/
+
+# Build artifacts
+dist/
+build/
