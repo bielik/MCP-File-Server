@@ -1,28 +1,64 @@
-version: '3.8'
-
 services:
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:latest  # Use latest stable version
     container_name: qdrant-mcp-research
     ports:
       - "6333:6333"  # REST API
-      - "6334:6334"  # gRPC API (optional)
+      - "6334:6334"  # gRPC API
     volumes:
       - qdrant_storage:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
     environment:
-      # Optional: configure Qdrant settings
+      # Core service configuration
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
-      # Enable collection snapshots
+      - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=32
+      - QDRANT__SERVICE__MAX_WORKERS=0  # Auto-detect CPU cores
+      
+      # Performance optimizations
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=0  # Use all CPU cores
+      - QDRANT__STORAGE__PERFORMANCE__MAX_OPTIMIZATION_THREADS=2
+      - QDRANT__STORAGE__OPTIMIZERS_CONFIG__MEMMAP_THRESHOLD_KB=200000
+      - QDRANT__STORAGE__OPTIMIZERS_CONFIG__INDEXING_THRESHOLD_KB=20000
+      - QDRANT__STORAGE__OPTIMIZERS_CONFIG__FLUSH_INTERVAL_SEC=5
+      
+      # HNSW index parameters (optimized for 512d M-CLIP vectors)
+      - QDRANT__STORAGE__HNSW_INDEX__M=16  # Connectivity parameter
+      - QDRANT__STORAGE__HNSW_INDEX__EF_CONSTRUCT=200  # Build-time accuracy
+      - QDRANT__STORAGE__HNSW_INDEX__MAX_M=16
+      
+      # Memory and storage management
+      - QDRANT__STORAGE__WAL__WAL_CAPACITY_MB=128
+      - QDRANT__STORAGE__WAL__WAL_SEGMENTS_AHEAD=2
       - QDRANT__STORAGE__SNAPSHOTS_PATH=/qdrant/snapshots
+      
+      # Quantization for large-scale deployments
+      - QDRANT__STORAGE__QUANTIZATION__SCALAR__TYPE=int8
+      - QDRANT__STORAGE__QUANTIZATION__SCALAR__QUANTILE=0.99
+      - QDRANT__STORAGE__QUANTIZATION__SCALAR__ALWAYS_RAM=true
+      
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 10s  # Faster health checks
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Adequate for 10,000+ documents
+        reservations:
+          memory: 4G
+    networks:
+      - mcp-network
 
 volumes:
   qdrant_storage:
     driver: local
+  qdrant_snapshots:
+    driver: local
+
+networks:
+  mcp-network:
+    driver: bridge
