@@ -49,7 +49,7 @@ A multimodal file server implementing the Model Context Protocol (MCP) for resea
 npm run dev
 ```
 This starts:
-- Backend MCP server on port 3003 (http://localhost:3003)
+- Backend MCP server on port 3005 with Web API on port 3006 (http://localhost:3006)
 - Frontend development server on port 3004 (http://localhost:3004)
 
 #### Start Individual Services
@@ -57,7 +57,7 @@ This starts:
 **Backend Only (MCP Server + Web API)**
 ```bash
 cd backend && npm run dev
-# Starts backend server on http://localhost:3003
+# Starts MCP server on port 3005 and Web API on http://localhost:3006
 ```
 
 **Frontend Only**
@@ -69,7 +69,7 @@ cd frontend && npm run dev
 **Web-Only Backend (No MCP Protocol)**
 ```bash
 cd backend && npx tsx server/web-only.ts
-# Starts web server only on http://localhost:3003 for UI testing
+# Starts web server only on http://localhost:3006 for UI testing
 ```
 
 ### Production Build
@@ -366,7 +366,8 @@ MIT License - see LICENSE file for details.
 - Qdrant local instance with multimodal collections
 
 ### Server Ports & URLs
-- **Backend Server**: http://localhost:3003 (MCP + Web API)
+- **MCP Server**: Port 3005 (MCP protocol for AI agents)
+- **Backend API**: http://localhost:3006 (Web API for frontend)
 - **Frontend Server**: http://localhost:3004 (React UI)
 - **WebSocket**: Connected automatically between frontend and backend
 

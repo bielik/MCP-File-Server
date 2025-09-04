@@ -339,6 +339,44 @@ pnpm test:search     # Test search functionality with sample queries
 4. Performance under load
 5. Error handling edge cases
 
+### UI Testing with Playwright
+We use Playwright for automated UI testing and visual verification of the MCP Research File Server frontend:
+
+**Setup & Usage:**
+```javascript
+// screenshot.cjs - Example Playwright test script
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch({ headless: false });
+  const page = await browser.newPage();
+  
+  // Navigate to the frontend
+  await page.goto('http://localhost:3004');
+  
+  // Take a screenshot
+  await page.screenshot({ path: 'mcp-frontend-screenshot.png', fullPage: true });
+  
+  await browser.close();
+})();
+```
+
+**Running Tests:**
+```bash
+# Take a screenshot of the running application
+node screenshot.cjs
+
+# For automated testing (future implementation)
+npm run test:e2e
+```
+
+**Test Coverage:**
+- Visual regression testing of UI components
+- File explorer navigation and interaction
+- Permission system verification
+- Real-time WebSocket update testing
+- API integration verification
+
 ### Performance Considerations
 - Stream large files instead of loading into memory
 - Implement file operation caching where appropriate

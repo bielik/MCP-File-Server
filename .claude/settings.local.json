@@ -5,7 +5,18 @@
       "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/comprehensive-multimodal-test.py)",
       "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/diagnose-and-fix-services.py)",
       "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/pytorch-compatibility-test.py)",
-      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/rag-evaluation/python/ragas_service.py)"
+      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/rag-evaluation/python/ragas_service.py)",
+      "Bash(set MCP_PORT=3005)",
+      "Bash(set WEB_UI_PORT=3006)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(npx tsx:*)",
+      "Bash(echo $WEB_UI_PORT)",
+      "Bash(curl:*)",
+      "Bash(start http://localhost:3004)",
+      "Bash(node:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
