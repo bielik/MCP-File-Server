@@ -55,10 +55,17 @@
   "author": "MCP Research Team",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "tsx": "^4.20.5"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "@qdrant/js-client-rest": "^1.15.1",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.11.0",
+    "uuid": "^11.1.0"
   }
 }

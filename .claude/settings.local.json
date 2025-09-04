@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe -m pip install sentence-transformers)"
+      "Bash(dir services)",
+      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/comprehensive-multimodal-test.py)",
+      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/diagnose-and-fix-services.py)",
+      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/pytorch-compatibility-test.py)",
+      "Bash(./tests/rag-evaluation/python-env/Scripts/python.exe tests/rag-evaluation/python/ragas_service.py)"
     ],
     "deny": [],
     "ask": []
