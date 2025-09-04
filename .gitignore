@@ -153,3 +153,36 @@ yarn.lock
 *.njsproj
 *.sln
 *.sw?
+
+# Python environments
+python-env/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Qdrant database storage
+services/qdrant/storage/
+*.qdrant-initialized
+
+# Temporary files and outputs
+BashOutput
+nul
+*_report_*.json
+service_diagnosis_report_*.json
+
+# Vector database files
+*.wal
+*.log
+
+# Generated test data
+tests/test-data/
+data/evaluation-reports/
+
+# Large files that shouldn't be tracked
+*.bin
+*.safetensors
+*.onnx
+*.model
