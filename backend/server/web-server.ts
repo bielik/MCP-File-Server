@@ -591,7 +591,7 @@ export class WebServer {
           res.json({
             message: 'MCP Research File Server - API Only',
             frontend: 'http://localhost:3004',
-            api: 'http://localhost:3003/api',
+            api: `http://localhost:${config.server.webUIPort}/api`,
             endpoints: {
               health: '/api/health',
               config: '/api/config',
@@ -604,7 +604,7 @@ export class WebServer {
         res.json({
           message: 'MCP Research File Server - API Only',
           frontend: 'http://localhost:3004',
-          api: 'http://localhost:3003/api'
+          api: `http://localhost:${config.server.webUIPort}/api`
         });
       });
     });

@@ -27,12 +27,12 @@ export default defineConfig({
     // Proxy API calls to the backend server
     proxy: {
       '/api': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:3006',
         changeOrigin: true,
         secure: false,
       },
       '/socket.io': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:3006',
         changeOrigin: true,
         ws: true,
       },
@@ -58,6 +58,6 @@ export default defineConfig({
 
   // Environment variables
   define: {
-    __API_BASE_URL__: JSON.stringify(process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3003'),
+    __API_BASE_URL__: JSON.stringify(process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3006'),
   },
 });
