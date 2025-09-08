@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Search, X, Clock, FileText, Image, Folder } from 'lucide-react';
+import { Search, X, Clock, FileText, Image, Folder, Zap, Globe, Filter } from 'lucide-react';
 import clsx from 'clsx';
+import { apiService } from '../../services/api.js';
 
 interface SearchSuggestion {
   id: string;
@@ -10,6 +11,43 @@ interface SearchSuggestion {
   preview?: string;
 }
 
+interface SearchResult {
+  id: string;
+  filePath: string;
+  score: number;
+  contentType: 'text' | 'image' | 'unknown';
+  textContent?: string;
+  highlight?: string;
+  imageCaption?: string;
+  documentTitle?: string;
+  pageNumber?: number;
+  chunkIndex?: number;
+  createdAt?: string;
+}
+
+interface SearchResponse {
+  success: boolean;
+  query: string;
+  searchType: string;
+  results: SearchResult[];
+  total: number;
+  searchDetails: {
+    service: string;
+    type: string;
+    threshold?: number;
+    fuzzy?: boolean;
+    modalities?: {
+      text: boolean;
+      images: boolean;
+    };
+  };
+  timing: {
+    duration: string;
+    searchTime: number;
+  };
+  timestamp: string;
+}
+
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
@@ -17,7 +55,11 @@ interface SearchBarProps {
   suggestions?: SearchSuggestion[];
   isLoading?: boolean;
   onSuggestionSelect?: (suggestion: SearchSuggestion) => void;
-  onSearch?: (query: string) => void;
+  onSearch?: (query: string, searchType: 'text' | 'semantic' | 'multimodal') => void;
+  onResults?: (results: SearchResponse) => void;
+  onError?: (error: string) => void;
+  searchType?: 'text' | 'semantic' | 'multimodal';
+  onSearchTypeChange?: (searchType: 'text' | 'semantic' | 'multimodal') => void;
   className?: string;
 }
 
@@ -56,18 +98,53 @@ export function SearchBar({
   isLoading = false,
   onSuggestionSelect,
   onSearch,
+  onResults,
+  onError,
+  searchType = 'text',
+  onSearchTypeChange,
   className,
 }: SearchBarProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [showSearchTypes, setShowSearchTypes] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const searchTypesRef = useRef<HTMLDivElement>(null);
 
   // Filter suggestions based on input
   const filteredSuggestions = suggestions.filter(suggestion =>
     suggestion.text.toLowerCase().includes(value.toLowerCase())
   );
+
+  // Perform actual search using API
+  const performSearch = useCallback(async (query: string, type: 'text' | 'semantic' | 'multimodal') => {
+    if (!query.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await apiService.searchFiles(query, type, {
+        limit: 20,
+        threshold: 0.7,
+        fuzzy: type === 'text' ? true : undefined,
+        highlight: type === 'text' ? true : undefined,
+        includeText: type === 'multimodal' ? true : undefined,
+        includeImages: type === 'multimodal' ? true : undefined,
+      });
+
+      if (response.success && response.data) {
+        onResults?.(response.data);
+        onSearch?.(query, type);
+      } else {
+        onError?.(response.error || 'Search failed');
+      }
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : 'Search failed');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [onResults, onSearch, onError]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -76,7 +153,7 @@ export function SearchBar({
     setShowSuggestions(newValue.length > 0);
   }, [onChange]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback(async (e: React.KeyboardEvent) => {
     if (!showSuggestions) return;
 
     switch (e.key) {
@@ -97,8 +174,8 @@ export function SearchBar({
         if (selectedIndex >= 0) {
           const suggestion = filteredSuggestions[selectedIndex];
           handleSuggestionSelect(suggestion);
-        } else if (onSearch) {
-          onSearch(value);
+        } else {
+          await performSearch(value, searchType);
           setShowSuggestions(false);
         }
         break;
@@ -154,6 +231,40 @@ export function SearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Search type selection handlers
+  const searchTypes = [
+    { 
+      key: 'text' as const, 
+      label: 'Text', 
+      icon: Search, 
+      description: 'Fast keyword search',
+      color: 'blue' 
+    },
+    { 
+      key: 'semantic' as const, 
+      label: 'Semantic', 
+      icon: Zap, 
+      description: 'AI-powered semantic search',
+      color: 'purple' 
+    },
+    { 
+      key: 'multimodal' as const, 
+      label: 'Multimodal', 
+      icon: Globe, 
+      description: 'Text and image search',
+      color: 'green' 
+    },
+  ];
+
+  const handleSearchTypeSelect = useCallback((type: 'text' | 'semantic' | 'multimodal') => {
+    onSearchTypeChange?.(type);
+    setShowSearchTypes(false);
+    // Trigger search with new type if there's a query
+    if (value.trim()) {
+      performSearch(value, type);
+    }
+  }, [onSearchTypeChange, value, performSearch]);
+
   const getSuggestionIcon = (type: SearchSuggestion['type']) => {
     switch (type) {
       case 'file': return FileText;
@@ -161,6 +272,14 @@ export function SearchBar({
       case 'content': return Search;
       case 'recent': return Clock;
       default: return Search;
+    }
+  };
+
+  const getSearchTypeIcon = (type: 'text' | 'semantic' | 'multimodal') => {
+    switch (type) {
+      case 'text': return Search;
+      case 'semantic': return Zap;
+      case 'multimodal': return Globe;
     }
   };
 
@@ -175,11 +294,21 @@ export function SearchBar({
         )}
       >
         <div className="absolute left-3 flex items-center">
-          {isLoading ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
-          ) : (
-            <Search size={16} className="text-gray-400" />
-          )}
+          <button
+            onClick={() => setShowSearchTypes(!showSearchTypes)}
+            className="flex items-center space-x-1 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+            title={`Search mode: ${searchType} - Click to change`}
+          >
+            {isLoading || isSearching ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+            ) : (
+              <>
+                {React.createElement(getSearchTypeIcon(searchType), { size: 16, className: 'text-gray-600' })}
+                <span className="text-xs font-medium text-gray-600 capitalize">{searchType}</span>
+                <Filter size={12} className="text-gray-400" />
+              </>
+            )}
+          </button>
         </div>
         
         <input
@@ -191,7 +320,7 @@ export function SearchBar({
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={placeholder}
-          className="w-full pl-10 pr-10 py-2.5 bg-transparent focus:outline-none text-sm placeholder-gray-500"
+          className="w-full pl-24 pr-10 py-2.5 bg-transparent focus:outline-none text-sm placeholder-gray-500"
         />
         
         {value && (
@@ -280,6 +409,63 @@ export function SearchBar({
                 <span>select</span>
                 <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">Esc</kbd>
                 <span>close</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Type Selector */}
+      {showSearchTypes && (
+        <div
+          ref={searchTypesRef}
+          className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-80"
+        >
+          <div className="p-3">
+            <div className="text-sm font-medium text-gray-700 mb-3">Search Mode</div>
+            <div className="space-y-2">
+              {searchTypes.map((type) => (
+                <button
+                  key={type.key}
+                  onClick={() => handleSearchTypeSelect(type.key)}
+                  className={clsx(
+                    'w-full flex items-center p-3 rounded-lg border transition-colors text-left',
+                    searchType === type.key
+                      ? 'bg-primary-50 border-primary-200'
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                  )}
+                >
+                  <div className="flex-shrink-0">
+                    <type.icon 
+                      size={18} 
+                      className={clsx(
+                        'mr-3',
+                        searchType === type.key ? 'text-primary-600' : 'text-gray-500'
+                      )}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm text-gray-900">
+                      {type.label} Search
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {type.description}
+                    </div>
+                  </div>
+                  {searchType === type.key && (
+                    <div className="flex-shrink-0">
+                      <div className="w-2 h-2 bg-primary-600 rounded-full"></div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            
+            <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+              <div className="space-y-1">
+                <div><strong>Text:</strong> Fast keyword matching with fuzzy search</div>
+                <div><strong>Semantic:</strong> AI understands meaning and context</div>
+                <div><strong>Multimodal:</strong> Searches both text content and images</div>
               </div>
             </div>
           </div>

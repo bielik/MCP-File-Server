@@ -7,10 +7,10 @@ import {
   MCLIPConfig,
   ProcessingConfig,
   FilePermissionMatrix,
-} from '../types/index.js';
+} from '../types/index.ts';
 
-// Load environment variables
-dotenvConfig();
+// Load environment variables from root directory
+dotenvConfig({ path: path.resolve(process.cwd(), '.env') });
 
 // Environment validation schema
 const envSchema = z.object({

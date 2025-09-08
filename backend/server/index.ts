@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { config, validateConfiguration } from '../config/index.js';
 import { allTools } from './tools.js';
-import { toolHandlers } from './handlers.js';
+import { toolHandlers, initializeSearchServices } from './handlers.js';
 import { logger, logWithContext } from '../utils/logger.js';
 import { initializeFileSystem, cleanupFileSystem } from '../files/index.js';
 import { WebServer } from './web-server.js';
@@ -90,6 +90,15 @@ class MCPResearchFileServer {
       // Initialize file management system
       await initializeFileSystem();
       logWithContext.info('File management system initialized');
+
+      // Initialize search services for Phase 3 Step 1
+      try {
+        await initializeSearchServices();
+        logWithContext.info('Search services initialized successfully');
+      } catch (error) {
+        logWithContext.warn('Failed to initialize search services - search functionality will be limited', error as Error);
+        // Continue startup - search services are optional for basic file operations
+      }
 
       // Start web server for frontend management
       await this.webServer.start();

@@ -58,6 +58,25 @@ export const fileManagementTools: Tool[] = [
     },
   },
   {
+    name: 'create_folder',
+    description: 'Create a new directory/folder in the output directory or its subfolders. Perfect for organizing research content, creating project structures, or preparing directories for file organization.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_path: {
+          type: 'string',
+          description: 'Path for the new folder (relative to output directory or absolute). Can create nested directories.',
+        },
+        create_parents: {
+          type: 'boolean',
+          description: 'Whether to create parent directories if they don\'t exist (default: true)',
+          default: true,
+        },
+      },
+      required: ['folder_path'],
+    },
+  },
+  {
     name: 'list_files',
     description: 'List files in a directory with filtering options. Useful for browsing available files and understanding the file structure.',
     inputSchema: {

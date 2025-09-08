@@ -29,7 +29,7 @@ interface FileContextMenuProps {
 interface MenuItem {
   id: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: any;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
@@ -59,7 +59,7 @@ export function FileContextMenu({
           name: 'example.md',
           type: 'file',
           size: 1024,
-          modified: new Date().toISOString(),
+          modified: new Date(),
           permission: 'read-write',
           path: '/working/example.md',
           category: 'document'

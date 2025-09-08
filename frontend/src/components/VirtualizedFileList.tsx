@@ -21,6 +21,7 @@ interface FileSystemEntry {
   level: number;
   isExpanded?: boolean;
   hasChildren?: boolean;
+  children?: FileSystemEntry[];
 }
 
 interface VirtualizedFileListProps {

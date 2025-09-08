@@ -75,7 +75,7 @@ export function FilterPanel({
 }: FilterPanelProps) {
   const [activeTab, setActiveTab] = useState<'permissions' | 'types' | 'categories' | 'advanced'>('permissions');
 
-  const handlePermissionToggle = useCallback((permission: string) => {
+  const handlePermissionToggle = useCallback((permission: 'read-only' | 'read-write' | 'agent-controlled') => {
     const newPermissions = filters.permissions.includes(permission)
       ? filters.permissions.filter(p => p !== permission)
       : [...filters.permissions, permission];

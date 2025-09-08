@@ -88,11 +88,11 @@ function Toast({ toast, onRemove }: ToastProps) {
                 {toast.message}
               </p>
             )}
-            {toast.action && (
+            {toast.actions && toast.actions.length > 0 && (
               <div className="mt-3">
                 <button
                   onClick={() => {
-                    toast.action?.onClick();
+                    toast.actions?.[0]?.action();
                     onRemove(toast.id);
                   }}
                   className={clsx(
@@ -100,7 +100,7 @@ function Toast({ toast, onRemove }: ToastProps) {
                     styles.button
                   )}
                 >
-                  {toast.action.label}
+                  {toast.actions[0].label}
                 </button>
               </div>
             )}

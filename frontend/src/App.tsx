@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Settings, RefreshCw, Server, FolderOpen, FileText, Database, Eye, Edit, Upload } from 'lucide-react';
+import { Settings, RefreshCw, Server, FolderOpen, Database, Eye, Edit, Upload, Search } from 'lucide-react';
 import { FileExplorer } from './components/FileExplorer';
+import { SearchView } from './components/SearchView';
 
 interface ServerConfig {
   permissionMatrix: {
@@ -30,7 +31,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
-  const [showConfig, setShowConfig] = useState(false);
+  const [activeTab, setActiveTab] = useState<'explorer' | 'search' | 'config'>('explorer');
   const [clearingEmbeddings, setClearingEmbeddings] = useState(false);
 
   const fetchData = async () => {
@@ -179,15 +180,22 @@ function App() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setShowConfig(false)}
-                  className={`px-3 py-1 rounded text-sm ${!showConfig ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                  onClick={() => setActiveTab('explorer')}
+                  className={`px-3 py-1 rounded text-sm ${activeTab === 'explorer' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'}`}
                 >
                   <FolderOpen className="w-4 h-4 inline mr-1" />
                   File Explorer
                 </button>
                 <button
-                  onClick={() => setShowConfig(true)}
-                  className={`px-3 py-1 rounded text-sm ${showConfig ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                  onClick={() => setActiveTab('search')}
+                  className={`px-3 py-1 rounded text-sm ${activeTab === 'search' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                >
+                  <Search className="w-4 h-4 inline mr-1" />
+                  Search
+                </button>
+                <button
+                  onClick={() => setActiveTab('config')}
+                  className={`px-3 py-1 rounded text-sm ${activeTab === 'config' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'}`}
                 >
                   <Settings className="w-4 h-4 inline mr-1" />
                   Configuration
@@ -211,7 +219,7 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden">
-        {showConfig ? (
+        {activeTab === 'config' ? (
           <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             <div className="px-4 py-6 sm:px-0">
               
@@ -384,6 +392,25 @@ function App() {
                 </div>
               </div>
 
+            </div>
+          </div>
+        ) : activeTab === 'search' ? (
+          <div className="flex flex-col h-full">
+            {/* Search Header */}
+            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">AI-Powered Search</h2>
+                  <p className="text-sm text-gray-500">
+                    Search files and content using keyword, semantic, or multimodal AI search
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Content */}
+            <div className="flex-1 overflow-hidden">
+              <SearchView className="h-full p-6" />
             </div>
           </div>
         ) : (

@@ -130,7 +130,6 @@ export function PermissionIndicator({
       <IconComponent
         size={16}
         className={clsx(config.color, className)}
-        title={`${config.label}: ${config.description}`}
       />
     );
   }

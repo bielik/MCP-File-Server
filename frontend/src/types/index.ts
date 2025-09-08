@@ -42,7 +42,7 @@ export interface UIState {
     };
   };
   sorting: {
-    field: 'name' | 'type' | 'size' | 'modified' | 'permissions' | 'category';
+    field: 'name' | 'type' | 'size' | 'modified' | 'permission' | 'category';
     direction: 'asc' | 'desc';
   };
 }
@@ -115,7 +115,7 @@ export interface SearchFilters {
 }
 
 export interface SortOptions {
-  field: 'name' | 'type' | 'size' | 'modified' | 'permissions' | 'category';
+  field: 'name' | 'type' | 'size' | 'modified' | 'permission' | 'category';
   direction: 'asc' | 'desc';
 }
 
@@ -147,9 +147,4 @@ export interface BreadcrumbItem {
 }
 
 // Re-export types from the main project that we need in the UI
-export type {
-  FilePermission,
-  FileCategory,
-  FileMetadata,
-  FilePermissionMatrix,
-} from '@/types/index.js';
+// Removed circular import - these types should be defined directly in this file

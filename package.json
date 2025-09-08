@@ -26,19 +26,7 @@
     "qdrant:start": "cd docker && docker-compose up -d qdrant",
     "qdrant:stop": "cd docker && docker-compose down",
     "qdrant:reset": "cd docker && docker-compose down && docker volume rm docker_qdrant_storage docker_qdrant_snapshots && docker-compose up -d qdrant",
-    "qdrant:setup": "cd scripts && python setup-qdrant-collections.py",
-    "services:start": "concurrently \"npm run qdrant:start\" \"npm run mclip:start\" \"npm run docling:start\"",
-    "services:stop": "npm run qdrant:stop && npm run mclip:stop && npm run docling:stop",
-    "mclip:start": "cd services && python mclip-service.py",
-    "mclip:stop": "taskkill /f /im python.exe /fi \"commandline cont mclip-service.py\" 2>nul || echo M-CLIP service not running",
-    "docling:start": "cd services && python docling-service.py",
-    "docling:stop": "taskkill /f /im python.exe /fi \"commandline cont docling-service.py\" 2>nul || echo Docling service not running",
-    "ragas:start": "cd tests/rag-evaluation && python python/evaluation_service.py",
-    "test:embeddings": "cd src/embeddings && npx tsx embedding-test.ts",
-    "test:integration": "npm run test:embeddings && cd tests && npm test",
-    "logs": "cd backend && npm run logs",
-    "health": "curl http://localhost:6333/health && curl http://localhost:8002/health && curl http://localhost:8003/health",
-    "download:models": "cd services && pip install -r requirements-mclip.txt -r requirements-docling.txt"
+    "logs": "cd backend && npm run logs"
   },
   "workspaces": [
     "backend",

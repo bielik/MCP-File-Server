@@ -71,7 +71,7 @@ export function FileListView({
     onFileSelect(allSelected ? [] : files.map(f => f.id));
   }, [files, selectedFiles, onFileSelect]);
 
-  const handleSort = useCallback((field: keyof FileItem) => {
+  const handleSort = useCallback((field: SortOptions['field']) => {
     const newDirection = 
       sorting.field === field && sorting.direction === 'asc' ? 'desc' : 'asc';
     onSortingChange({ field, direction: newDirection });
@@ -224,7 +224,7 @@ export function FileListView({
                       column.align === 'right' && 'text-right',
                       column.sortable && 'cursor-pointer hover:text-gray-700'
                     )}
-                    onClick={() => column.sortable && column.key !== 'actions' && handleSort(column.key as keyof FileItem)}
+                    onClick={() => column.sortable && column.key !== 'actions' && handleSort(column.key as SortOptions['field'])}
                   >
                     <div className={clsx(
                       'flex items-center',

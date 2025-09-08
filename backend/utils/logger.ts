@@ -1,6 +1,6 @@
 import winston from 'winston';
 import path from 'path';
-import { serverConfig, getAbsolutePath } from '../config/index.js';
+import { serverConfig, getAbsolutePath } from '../config/index.ts';
 
 // Custom log format
 const logFormat = winston.format.combine(

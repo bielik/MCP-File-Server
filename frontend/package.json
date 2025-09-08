@@ -19,9 +19,11 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.2.0",
     "react-window": "^1.8.11",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/react": "^18.2.47",
     "@types/react-dom": "^18.2.18",
     "@types/react-window": "^1.8.8",

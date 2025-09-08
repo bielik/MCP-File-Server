@@ -9,7 +9,8 @@ import {
   Cpu, 
   Clock,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  XCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -77,61 +78,14 @@ export function StatusBar({
           </span>
         </div>
 
-        {systemStatus?.storage && (
-          <div className="flex items-center space-x-1">
-            <HardDrive size={14} className="text-gray-400" />
-            <span className="text-gray-600">
-              {formatBytes(systemStatus.storage.used)} / {formatBytes(systemStatus.storage.total)} used
-            </span>
-            <div className="w-16 h-1.5 bg-gray-200 rounded-full ml-1">
-              <div 
-                className={clsx(
-                  'h-full rounded-full transition-all',
-                  systemStatus.storage.used / systemStatus.storage.total > 0.9 
-                    ? 'bg-danger-500'
-                    : systemStatus.storage.used / systemStatus.storage.total > 0.7
-                    ? 'bg-warning-500'
-                    : 'bg-success-500'
-                )}
-                style={{
-                  width: `${Math.min(100, (systemStatus.storage.used / systemStatus.storage.total) * 100)}%`
-                }}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Center Section - System Status */}
       <div className="flex items-center space-x-4">
         {systemStatus && (
           <>
-            {systemStatus.cpu !== undefined && (
-              <div className="flex items-center space-x-1">
-                <Cpu size={14} className="text-gray-400" />
-                <span className="text-gray-600">
-                  CPU: {systemStatus.cpu.toFixed(1)}%
-                </span>
-              </div>
-            )}
 
-            {systemStatus.memory && (
-              <div className="flex items-center space-x-1">
-                <TrendingUp size={14} className="text-gray-400" />
-                <span className="text-gray-600">
-                  RAM: {formatBytes(systemStatus.memory.used)} / {formatBytes(systemStatus.memory.total)}
-                </span>
-              </div>
-            )}
 
-            {systemStatus.uptime !== undefined && (
-              <div className="flex items-center space-x-1">
-                <Clock size={14} className="text-gray-400" />
-                <span className="text-gray-600">
-                  Uptime: {formatUptime(systemStatus.uptime)}
-                </span>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -139,20 +93,19 @@ export function StatusBar({
       {/* Right Section - Connection & Health */}
       <div className="flex items-center space-x-4">
         {/* System Health */}
-        {systemStatus?.status && (
+        {systemStatus && (
           <div className="flex items-center space-x-1">
-            {(() => {
-              const StatusIcon = getStatusIcon(systemStatus.status);
-              return (
-                <StatusIcon 
-                  size={14} 
-                  className={getStatusColor(systemStatus.status)} 
-                />
-              );
-            })()}
-            <span className={clsx('capitalize', getStatusColor(systemStatus.status))}>
-              {systemStatus.status}
-            </span>
+            {systemStatus.healthy ? (
+              <>
+                <CheckCircle2 size={14} className="text-success-600" />
+                <span className="text-success-600">Healthy</span>
+              </>
+            ) : (
+              <>
+                <XCircle size={14} className="text-danger-600" />
+                <span className="text-danger-600">Unhealthy</span>
+              </>
+            )}
           </div>
         )}
 

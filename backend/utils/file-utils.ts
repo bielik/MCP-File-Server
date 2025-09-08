@@ -3,9 +3,9 @@ import path from 'path';
 import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import mime from 'mime-types';
-import { FileMetadata, FilePermission, FileCategory, MCPServerError } from '../types/index.js';
-import { filePermissionMatrix, getAbsolutePath } from '../config/index.js';
-import { logFileOperation } from './logger.js';
+import { FileMetadata, FilePermission, FileCategory, MCPServerError } from '../types/index.ts';
+import { filePermissionMatrix, getAbsolutePath } from '../config/index.ts';
+import { logFileOperation } from './logger.ts';
 
 // Path validation and security
 export function validatePath(filePath: string): string {
@@ -207,6 +207,68 @@ export async function ensureDirectoryExists(dirPath: string): Promise<void> {
   }
 }
 
+export async function createFolder(folderPath: string, createParents = true): Promise<void> {
+  const absolutePath = validatePath(folderPath);
+  
+  // For folder creation, we need to be in the output directory or have write permission
+  const { allowed, permission } = isPathInAllowedDirectory(absolutePath);
+  
+  if (!allowed) {
+    throw new MCPServerError(
+      `Cannot create folder: ${folderPath} is not in an allowed directory`,
+      'CREATE_PERMISSION_DENIED',
+      403
+    );
+  }
+  
+  if (permission === 'read-only') {
+    throw new MCPServerError(
+      `Cannot create folder: ${folderPath} is in a read-only directory`,
+      'CREATE_PERMISSION_DENIED',
+      403
+    );
+  }
+  
+  // Check if directory already exists
+  try {
+    const stats = await fs.stat(absolutePath);
+    if (stats.isDirectory()) {
+      throw new MCPServerError(
+        `Folder already exists: ${folderPath}`,
+        'FOLDER_EXISTS'
+      );
+    } else {
+      throw new MCPServerError(
+        `Path exists but is not a folder: ${folderPath}`,
+        'PATH_NOT_FOLDER'
+      );
+    }
+  } catch (error) {
+    // Directory doesn't exist, which is what we want
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      // Re-throw if it's our custom error or some other error
+      if (error instanceof MCPServerError) {
+        throw error;
+      }
+      throw new MCPServerError(
+        `Failed to check folder existence: ${(error as Error).message}`,
+        'FOLDER_CHECK_ERROR'
+      );
+    }
+  }
+  
+  try {
+    await fs.mkdir(absolutePath, { recursive: createParents });
+    logFileOperation('create_folder', absolutePath, true);
+  } catch (error) {
+    logFileOperation('create_folder', absolutePath, false, undefined, (error as Error).message);
+    throw new MCPServerError(
+      `Failed to create folder: ${(error as Error).message}`,
+      'FOLDER_CREATE_ERROR'
+    );
+  }
+}
+
 export async function listFiles(
   directoryPath: string,
   recursive = false,
@@ -344,6 +406,7 @@ export default {
   readFileContent,
   writeFileContent,
   createFile,
+  createFolder,
   listFiles,
   getFolderStructure,
   getFileType,

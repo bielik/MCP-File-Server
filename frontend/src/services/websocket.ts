@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { WebSocketMessage } from '../types/index.js';
+// import { WebSocketMessage } from '../types/index.js'; // Unused for now
 
 class WebSocketService {
   private socket: Socket | null = null;
@@ -13,7 +13,7 @@ class WebSocketService {
   }
 
   private connect(): void {
-    const wsUrl = __API_BASE_URL__ || window.location.origin;
+    const wsUrl = 'http://localhost:3001';
     
     this.socket = io(wsUrl, {
       transports: ['websocket', 'polling'],

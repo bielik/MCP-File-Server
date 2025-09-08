@@ -186,3 +186,6 @@ data/evaluation-reports/
 *.safetensors
 *.onnx
 *.model
+
+# .gpt folder
+.gpt/

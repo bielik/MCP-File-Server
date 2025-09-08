@@ -1,6 +1,6 @@
-import { APIResponse, FileItem, FileOperationResult, PermissionUpdateResult, SystemStatus, SearchFilters, SortOptions } from '../types/index.js';
+import { APIResponse, FileItem, PermissionUpdateResult, SystemStatus, SearchFilters, SortOptions } from '../types/index.js';
 
-const API_BASE = __API_BASE_URL__ || '';
+const API_BASE = 'http://localhost:3001';
 
 class APIService {
   private baseUrl: string;
@@ -143,31 +143,82 @@ class APIService {
     query: string,
     searchType: 'text' | 'semantic' | 'multimodal' = 'text',
     options?: {
+      limit?: number;
+      threshold?: number;
+      fuzzy?: boolean;
+      highlight?: boolean;
+      includeText?: boolean;
+      includeImages?: boolean;
       categories?: string[];
       fileTypes?: string[];
-      maxResults?: number;
     }
   ): Promise<APIResponse<{
-    results: Array<{
-      id: string;
-      path: string;
-      snippet: string;
-      relevance: number;
-      type: 'text' | 'image';
-    }>;
+    success: boolean;
     query: string;
     searchType: string;
-    totalResults: number;
-    searchTime: number;
+    results: Array<{
+      id: string;
+      filePath: string;
+      score: number;
+      contentType: 'text' | 'image' | 'unknown';
+      textContent?: string;
+      highlight?: string;
+      imageCaption?: string;
+      documentTitle?: string;
+      pageNumber?: number;
+      chunkIndex?: number;
+      createdAt?: string;
+    }>;
+    total: number;
+    searchDetails: {
+      service: string;
+      type: string;
+      threshold?: number;
+      fuzzy?: boolean;
+      modalities?: {
+        text: boolean;
+        images: boolean;
+      };
+    };
+    timing: {
+      duration: string;
+      searchTime: number;
+    };
+    timestamp: string;
   }>> {
     return this.request(`/search`, {
       method: 'POST',
       body: JSON.stringify({
         query,
         searchType,
-        ...options,
+        options,
       }),
     });
+  }
+
+  // Search service status
+  async getSearchStatus(): Promise<APIResponse<{
+    services: {
+      keyword: {
+        ready: boolean;
+        documentsIndexed: number;
+        service: string;
+      };
+      semantic: {
+        ready: boolean;
+        initialized: boolean;
+        aiServiceReady: boolean;
+        vectorDbServiceReady: boolean;
+        totalQueries: number;
+        service: string;
+      };
+    };
+    overall: {
+      ready: boolean;
+      timestamp: string;
+    };
+  }>> {
+    return this.request(`/search/status`);
   }
 
   // System Status and Health

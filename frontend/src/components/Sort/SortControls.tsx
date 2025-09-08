@@ -4,7 +4,7 @@ import { ArrowUpDown, ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SortOption {
-  field: keyof SortOptions['field'];
+  field: SortOptions['field'];
   label: string;
 }
 

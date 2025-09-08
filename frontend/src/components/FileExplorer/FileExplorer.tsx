@@ -183,7 +183,7 @@ export function FileExplorer({
               { field: 'type', label: 'Type' },
               { field: 'size', label: 'Size' },
               { field: 'modified', label: 'Modified' },
-              { field: 'permissions', label: 'Permission' },
+              { field: 'permission', label: 'Permission' },
             ]}
           />
         </div>

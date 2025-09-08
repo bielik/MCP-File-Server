@@ -106,9 +106,9 @@ export function FileCard({
           <div
             className={clsx(
               'absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white',
-              file.permission === 'context' && 'bg-blue-500',
-              file.permission === 'working' && 'bg-green-500', 
-              file.permission === 'output' && 'bg-purple-500',
+              file.permission === 'read-only' && 'bg-blue-500',
+              file.permission === 'read-write' && 'bg-green-500', 
+              file.permission === 'agent-controlled' && 'bg-purple-500',
               !file.permission && 'bg-gray-300'
             )}
             title={file.permission ? `Permission: ${file.permission}` : 'No permission assigned'}

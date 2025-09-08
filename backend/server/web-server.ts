@@ -6,6 +6,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { config } from '../config/index.js';
 import { filePermissionManager } from '../files/permissions.js';
 import { logWithContext } from '../utils/logger.js';
+import { keywordSearchService } from '../src/features/search/keywordSearch.js';
+import { semanticSearchService } from '../src/features/search/semanticSearch.js';
 import type { 
   FilePermissionMatrix, 
   FileMetadata, 
@@ -340,6 +342,180 @@ export class WebServer {
       } catch (error) {
         logWithContext.error('Error clearing embeddings', error as Error);
         res.status(500).json({ error: 'Failed to clear embeddings' });
+      }
+    });
+
+    // Search endpoints
+    apiRouter.post('/search', async (req, res) => {
+      const startTime = Date.now();
+      
+      try {
+        const { query, searchType = 'text', options = {} } = req.body;
+        
+        // Validate input
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
+          res.status(400).json({ 
+            error: 'Query is required and must be a non-empty string',
+            searchType,
+            duration: Date.now() - startTime,
+          });
+          return;
+        }
+        
+        if (!['text', 'semantic', 'multimodal'].includes(searchType)) {
+          res.status(400).json({ 
+            error: 'Invalid search type. Must be one of: text, semantic, multimodal',
+            searchType,
+            duration: Date.now() - startTime,
+          });
+          return;
+        }
+        
+        let results = [];
+        let searchDetails = {};
+        
+        // Execute search based on type
+        switch (searchType) {
+          case 'text':
+            // Keyword search using FlexSearch
+            results = await keywordSearchService.search(query, {
+              limit: options.limit || 20,
+              fuzzy: options.fuzzy !== false, // Default to true
+              highlight: options.highlight !== false, // Default to true
+              ...options,
+            });
+            searchDetails = {
+              service: 'FlexSearch',
+              type: 'keyword_matching',
+              fuzzy: options.fuzzy !== false,
+            };
+            break;
+            
+          case 'semantic':
+            // Semantic search using vector embeddings
+            results = await semanticSearchService.searchText(query, {
+              limit: options.limit || 10,
+              threshold: options.threshold || 0.7,
+              searchMode: 'text_only',
+              ...options,
+            });
+            searchDetails = {
+              service: 'M-CLIP Embeddings + Qdrant',
+              type: 'vector_similarity',
+              threshold: options.threshold || 0.7,
+            };
+            break;
+            
+          case 'multimodal':
+            // Multimodal search (text and images)
+            results = await semanticSearchService.searchMultimodal(query, {
+              limit: options.limit || 15,
+              threshold: options.threshold || 0.7,
+              includeText: options.includeText !== false, // Default to true
+              includeImages: options.includeImages !== false, // Default to true
+              searchMode: 'multimodal',
+              ...options,
+            });
+            searchDetails = {
+              service: 'M-CLIP Embeddings + Qdrant',
+              type: 'cross_modal_similarity',
+              threshold: options.threshold || 0.7,
+              modalities: {
+                text: options.includeText !== false,
+                images: options.includeImages !== false,
+              },
+            };
+            break;
+        }
+        
+        const duration = Date.now() - startTime;
+        
+        // Format response
+        const response = {
+          success: true,
+          query,
+          searchType,
+          results: results.map(result => ({
+            id: result.id,
+            filePath: result.filePath,
+            score: result.score,
+            contentType: result.contentType || (result.textContent ? 'text' : 'unknown'),
+            textContent: result.textContent,
+            highlight: result.highlight,
+            imageCaption: result.imageCaption,
+            documentTitle: result.documentTitle,
+            pageNumber: result.pageNumber,
+            chunkIndex: result.chunkIndex,
+            createdAt: result.createdAt,
+          })),
+          total: results.length,
+          searchDetails,
+          timing: {
+            duration: `${duration}ms`,
+            searchTime: duration,
+          },
+          timestamp: new Date().toISOString(),
+        };
+        
+        logWithContext.info('API search completed', {
+          query,
+          searchType,
+          resultCount: results.length,
+          duration: `${duration}ms`,
+        });
+        
+        res.json(response);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        const errorMessage = (error as Error).message;
+        
+        logWithContext.error('API search failed', error as Error, {
+          query: req.body.query,
+          searchType: req.body.searchType,
+          duration: `${duration}ms`,
+        });
+        
+        res.status(500).json({
+          success: false,
+          error: 'Search operation failed',
+          details: errorMessage,
+          searchType: req.body.searchType || 'unknown',
+          duration: `${duration}ms`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
+    // Search service status endpoint
+    apiRouter.get('/search/status', (req, res) => {
+      try {
+        const keywordStatus = keywordSearchService.getStatus();
+        const semanticStatus = semanticSearchService.getStatus();
+        
+        res.json({
+          services: {
+            keyword: {
+              ready: keywordStatus.ready,
+              documentsIndexed: keywordStatus.documentsIndexed,
+              service: 'FlexSearch',
+            },
+            semantic: {
+              ready: semanticStatus.ready,
+              initialized: semanticStatus.initialized,
+              aiServiceReady: semanticStatus.aiServiceReady,
+              vectorDbServiceReady: semanticStatus.vectorDbServiceReady,
+              totalQueries: semanticStatus.totalQueries,
+              service: 'M-CLIP + Qdrant',
+            },
+          },
+          overall: {
+            ready: keywordStatus.ready && semanticStatus.ready,
+            timestamp: new Date().toISOString(),
+          }
+        });
+      } catch (error) {
+        logWithContext.error('Error fetching search service status', error as Error);
+        res.status(500).json({ error: 'Failed to fetch search service status' });
       }
     });
 

@@ -36,6 +36,7 @@ interface FileSystemEntry {
   permissions?: 'context' | 'working' | 'output' | null;
   children?: FileSystemEntry[];
   isExpanded?: boolean;
+  level: number;
 }
 
 interface FileExplorerProps {
@@ -58,6 +59,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [searchFilters, setSearchFilters] = useState<any>({});
   const [useVirtualization, setUseVirtualization] = useState(false);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [showPermissionPanel, setShowPermissionPanel] = useState(false);
 
   // Initialize undo/redo functionality
   const {
@@ -412,7 +414,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         case '/':
           e.preventDefault();
           // Focus search input
-          document.querySelector('input[placeholder*="Search"]')?.focus();
+          (document.querySelector('input[placeholder*="Search"]') as HTMLInputElement)?.focus();
           break;
 
         case 'a':
