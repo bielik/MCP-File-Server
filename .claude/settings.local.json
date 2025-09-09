@@ -33,7 +33,8 @@
       "Bash(wmic process where processid=11776 delete:*)",
       "Bash(wmic process where:*)",
       "Bash(git add:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
