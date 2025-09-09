@@ -152,4 +152,4 @@ yarn.lock
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.sw?services/qdrant/storage/
