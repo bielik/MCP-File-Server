@@ -229,7 +229,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const handlePermissionRemove = async (paths: string[]) => {
     try {
       // Call backend to remove permissions
-      const response = await fetch('/api/permissions/remove', {
+      const response = await fetch('/api/config/permissions/remove', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

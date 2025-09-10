@@ -11,7 +11,7 @@ import type {
   FileMetadata, 
   FilePermission 
 } from '../types/index.js';
-import { filesystemRouter } from './routers/filesystem.router.js';
+import { filesystemRouter, validateAndSanitizePath } from './routers/filesystem.router.js';
 
 export class WebServer {
   private app: express.Application;
@@ -204,7 +204,6 @@ export class WebServer {
           return;
         }
 
-        const { validateAndSanitizePath } = await import('./routers/filesystem.router.js');
         const validatedPaths = await Promise.all(paths.map(path => validateAndSanitizePath(path)));
         
         const currentMatrix = filePermissionManager.getPermissionMatrix();
@@ -249,7 +248,6 @@ export class WebServer {
           return;
         }
         
-        const { validateAndSanitizePath } = await import('./routers/filesystem.router.js');
         const validatedPaths = await Promise.all(paths.map(path => validateAndSanitizePath(path)));
         const currentMatrix = filePermissionManager.getPermissionMatrix();
         
