@@ -11,6 +11,7 @@ import type {
   FileMetadata, 
   FilePermission 
 } from '../types/index.js';
+import { filesystemRouter } from './routers/filesystem.router.js';
 
 export class WebServer {
   private app: express.Application;
@@ -27,7 +28,6 @@ export class WebServer {
     this.app.use(cors());
     this.app.use(express.json());
     
-    // Only serve static files if dist directory exists (production mode)
     const distPath = path.join(process.cwd(), '../frontend/dist');
     try {
       import('fs').then(fs => {
@@ -36,96 +36,15 @@ export class WebServer {
         }
       });
     } catch (error) {
-      // In development mode, frontend is served by Vite
       logWithContext.info('Frontend dist directory not found - running in development mode');
     }
   }
 
-  private isAccessibleDirectory(entryName: string, fullPath: string): boolean {
-    // Skip hidden files and system directories
-    if (entryName.startsWith('.') || 
-        entryName.startsWith('NTUSER') || 
-        entryName.includes('regtrans-ms')) {
-      return false;
-    }
-
-    // Windows system directories to skip
-    const windowsSystemDirs = [
-      'AppData', 'Application Data', 'Local Settings', 'NetHood', 'PrintHood', 
-      'SendTo', 'Start Menu', 'Templates', 'Recent', 'Cookies', 'Favorites',
-      'My Music', 'My Pictures', 'My Videos', 'My Documents'
-    ];
-
-    if (windowsSystemDirs.includes(entryName)) {
-      return false;
-    }
-
-    // Windows junction points and special folders that may cause permission issues
-    const problematicDirs = [
-      'ntuser.dat.LOG1', 'ntuser.dat.LOG2', 'ntuser.ini',
-      'Tracing', 'Saved Games', 'Searches'
-    ];
-
-    if (problematicDirs.some(dir => entryName.toLowerCase().includes(dir.toLowerCase()))) {
-      return false;
-    }
-
-    // If it's in the user profile, be more permissive for common directories
-    const userProfile = process.env.USERPROFILE || '';
-    if (fullPath.startsWith(userProfile)) {
-      const commonUserDirs = [
-        'Documents', 'Downloads', 'Desktop', 'Pictures', 'Music', 'Videos',
-        'OneDrive', 'Dropbox', 'Google Drive', 'iCloud Drive'
-      ];
-      
-      // Allow common directories or directories that start with common prefixes
-      const isCommonDir = commonUserDirs.some(dir => 
-        entryName === dir || entryName.startsWith(dir + ' ') || entryName.startsWith(dir + '-')
-      );
-      
-      if (isCommonDir) {
-        return true;
-      }
-
-      // Allow other user directories that don't look like system files
-      return !entryName.startsWith('NTUSER') && 
-             !entryName.includes('.dat') && 
-             !entryName.includes('.log');
-    }
-
-    return true;
-  }
-
-  private async isDirectoryOrJunction(path: string): Promise<{ isDirectory: boolean; stats: any }> {
-    const fs = await import('fs/promises');
-    
-    try {
-      // Use lstat to detect symbolic links and junction points
-      const stats = await fs.lstat(path);
-      
-      // Check if it's a directory OR a symbolic link pointing to a directory
-      let isDirectory = stats.isDirectory();
-      
-      if (!isDirectory && stats.isSymbolicLink()) {
-        try {
-          // For symbolic links, check what they point to
-          const realStats = await fs.stat(path);
-          isDirectory = realStats.isDirectory();
-        } catch {
-          // If we can't follow the link, assume it's not a directory
-          isDirectory = false;
-        }
-      }
-      
-      return { isDirectory, stats };
-    } catch (error) {
-      return { isDirectory: false, stats: null };
-    }
-  }
-
   private setupRoutes(): void {
-    // API Routes
     const apiRouter = express.Router();
+    
+    // Mount the modular routers
+    apiRouter.use('/filesystem', filesystemRouter);
 
     // Configuration endpoints
     apiRouter.get('/config', (req, res) => {
@@ -162,96 +81,6 @@ export class WebServer {
       } catch (error) {
         logWithContext.error('Error updating permission matrix', error as Error);
         res.status(500).json({ error: 'Failed to update permission matrix' });
-      }
-    });
-
-    // Path validation endpoints
-    apiRouter.post('/filesystem/validate-path', async (req, res) => {
-      try {
-        const { path: requestedPath } = req.body;
-        
-        if (!requestedPath) {
-          res.status(400).json({ error: 'Path is required' });
-          return;
-        }
-
-        const fs = await import('fs/promises');
-        const path = await import('path');
-        
-        try {
-          const normalizedPath = await this.validateAndSanitizePath(requestedPath);
-          
-          // Check if path exists and is accessible
-          const stats = await fs.stat(normalizedPath);
-          await fs.access(normalizedPath, fs.constants.R_OK);
-          
-          res.json({
-            valid: true,
-            exists: true,
-            accessible: true,
-            isDirectory: stats.isDirectory(),
-            normalizedPath,
-            suggestion: null
-          });
-        } catch (error) {
-          // Try to suggest a corrected path
-          let suggestion = null;
-          try {
-            // Common path corrections
-            const corrections = [
-              requestedPath.replace(/\//g, '\\'), // Convert forward slashes
-              requestedPath.replace(/\\\\/g, '\\'), // Fix double backslashes
-              requestedPath.replace(/^~/, process.env.USERPROFILE || 'C:\\Users'), // Expand ~
-            ];
-            
-            for (const corrected of corrections) {
-              if (corrected !== requestedPath) {
-                try {
-                  const testPath = path.resolve(corrected);
-                  await fs.access(testPath, fs.constants.R_OK);
-                  suggestion = testPath;
-                  break;
-                } catch {}
-              }
-            }
-          } catch {}
-          
-          res.json({
-            valid: false,
-            exists: false,
-            accessible: false,
-            isDirectory: false,
-            normalizedPath: requestedPath,
-            suggestion,
-            error: (error as Error).message
-          });
-        }
-      } catch (error) {
-        logWithContext.error('Error validating path', error as Error);
-        res.status(500).json({ error: 'Failed to validate path' });
-      }
-    });
-
-    apiRouter.get('/filesystem/common-paths', (req, res) => {
-      try {
-        const userProfile = process.env.USERPROFILE || 'C:\\Users\\DefaultUser';
-        const userName = process.env.USERNAME || 'User';
-        
-        const commonPaths = [
-          { name: 'This PC', path: '', icon: 'hard-drive' },
-          { name: 'Documents', path: `${userProfile}\\Documents`, icon: 'folder' },
-          { name: 'Downloads', path: `${userProfile}\\Downloads`, icon: 'folder' },
-          { name: 'Desktop', path: `${userProfile}\\Desktop`, icon: 'folder' },
-          { name: 'Pictures', path: `${userProfile}\\Pictures`, icon: 'folder' },
-          { name: 'OneDrive - Decoding Spaces', path: `${userProfile}\\OneDrive - Decoding Spaces GbR`, icon: 'folder' },
-          { name: 'OneDrive - Bauhaus', path: `${userProfile}\\OneDrive - Bauhaus - Universität Weimar`, icon: 'folder' },
-          { name: 'C: Drive', path: 'C:\\', icon: 'hard-drive' },
-        ];
-
-        res.json(commonPaths);
-      } catch (error) {
-        logWithContext.error('Error getting common paths', error as Error);
-        res.status(500).json({ error: 'Failed to get common paths' });
       }
     });
 
@@ -314,12 +143,10 @@ export class WebServer {
     // Clear embeddings endpoint
     apiRouter.post('/config/clear-embeddings', async (req, res) => {
       try {
-        // Clear Qdrant collections
         const { QdrantVectorStore } = await import('../storage/index.js');
         const vectorStore = new QdrantVectorStore();
         await vectorStore.clearAllCollections();
 
-        // Clear cached embeddings directory
         const fs = await import('fs/promises');
         const path = await import('path');
         const embeddingsDir = path.join(process.cwd(), 'embeddings-cache');
@@ -353,11 +180,10 @@ export class WebServer {
       });
     });
 
-    // Logs endpoint (simple file reading - in production you'd want proper log management)
+    // Logs endpoint
     apiRouter.get('/logs', async (req, res) => {
       try {
         const { lines = 100 } = req.query;
-        // This is a simple implementation - in production you'd want proper log streaming
         res.json({ 
           message: 'Log endpoint not fully implemented yet',
           suggestion: 'Check console logs or log file directly',
@@ -365,129 +191,6 @@ export class WebServer {
       } catch (error) {
         logWithContext.error('Error fetching logs', error as Error);
         res.status(500).json({ error: 'Failed to fetch logs' });
-      }
-    });
-
-    // File system browsing endpoints
-    apiRouter.get('/filesystem/browse', async (req, res) => {
-      try {
-        const { path: requestedPath = '' } = req.query;
-        const targetPath = await this.validateAndSanitizePath(requestedPath as string);
-        
-        const fs = await import('fs/promises');
-        const path = await import('path');
-        
-        const entries = await fs.readdir(targetPath, { withFileTypes: true });
-        const items = await Promise.all(entries.map(async (entry) => {
-          const fullPath = path.join(targetPath, entry.name);
-          
-          // Use improved filtering logic
-          if (!this.isAccessibleDirectory(entry.name, fullPath)) {
-            return null;
-          }
-          
-          try {
-            // Use junction-aware directory detection
-            const { isDirectory, stats } = await this.isDirectoryOrJunction(fullPath);
-            
-            // For directories, do a quick access test
-            if (isDirectory) {
-              try {
-                await fs.access(fullPath, fs.constants.R_OK);
-              } catch {
-                return null; // Skip inaccessible directories
-              }
-            }
-            
-            const permissionResult = await (async () => {
-              // Use browsing-specific permission check (less noisy)
-              try {
-                const result = await filePermissionManager.getFilePermissionForBrowsing(fullPath);
-                console.log(`🌐 API Response for ${fullPath}: permission = ${result.permission}`);
-                return result.permission;
-              } catch (error) {
-                console.log(`❌ Permission check failed for ${fullPath}:`, error);
-                return null;
-              }
-            })();
-
-            return {
-              name: entry.name,
-              path: fullPath,
-              type: isDirectory ? 'directory' : 'file',
-              size: !isDirectory ? stats.size : null,
-              modified: stats.mtime.toISOString(),
-              permissions: permissionResult,
-            };
-          } catch (error) {
-            return null; // Skip inaccessible files
-          }
-        }));
-
-        const validItems = items.filter(item => item !== null);
-        res.json({ 
-          currentPath: targetPath, 
-          entries: validItems 
-        });
-      } catch (error) {
-        logWithContext.error('Error browsing filesystem', error as Error);
-        res.status(500).json({ error: 'Failed to browse directory' });
-      }
-    });
-
-    apiRouter.get('/filesystem/tree', async (req, res) => {
-      try {
-        const { path: requestedPath = '', depth = '2' } = req.query;
-        const targetPath = await this.validateAndSanitizePath(requestedPath as string);
-        const maxDepth = Math.min(parseInt(depth as string) || 2, 5); // Limit depth for performance
-        
-        const buildTree = async (currentPath: string, currentDepth: number): Promise<any> => {
-          if (currentDepth >= maxDepth) return null;
-          
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          
-          try {
-            const entries = await fs.readdir(currentPath, { withFileTypes: true });
-            const directories = entries.filter(entry => {
-              if (!entry.isDirectory()) return false;
-              const fullPath = path.join(currentPath, entry.name);
-              return this.isAccessibleDirectory(entry.name, fullPath);
-            });
-            
-            const children = await Promise.all(directories.map(async (dir) => {
-              const dirPath = path.join(currentPath, dir.name);
-              
-              // Test directory accessibility
-              try {
-                await fs.access(dirPath, fs.constants.R_OK);
-              } catch {
-                return null; // Skip inaccessible directories
-              }
-              
-              const subtree = await buildTree(dirPath, currentDepth + 1);
-              const permissionResult = await filePermissionManager.getFilePermissionForBrowsing(dirPath);
-              
-              return {
-                name: dir.name,
-                path: dirPath,
-                type: 'directory',
-                permissions: permissionResult.permission,
-                children: subtree,
-              };
-            }));
-            
-            return children.filter(child => child !== null);
-          } catch (error) {
-            return null;
-          }
-        };
-
-        const tree = await buildTree(targetPath, 0);
-        res.json({ path: targetPath, tree });
-      } catch (error) {
-        logWithContext.error('Error building filesystem tree', error as Error);
-        res.status(500).json({ error: 'Failed to build directory tree' });
       }
     });
 
@@ -501,19 +204,15 @@ export class WebServer {
           return;
         }
 
-        // Validate all paths first
-        const validatedPaths = await Promise.all(paths.map(path => this.validateAndSanitizePath(path)));
+        const { validateAndSanitizePath } = await import('./routers/filesystem.router.js');
+        const validatedPaths = await Promise.all(paths.map(path => validateAndSanitizePath(path)));
         
-        // Update permission matrix based on permission type
         const currentMatrix = filePermissionManager.getPermissionMatrix();
         let newMatrix = { ...currentMatrix };
 
         validatedPaths.forEach(path => {
-          // Remove from other permission types first
           newMatrix.contextFolders = newMatrix.contextFolders.filter(p => p !== path);
           newMatrix.workingFolders = newMatrix.workingFolders.filter(p => p !== path);
-          
-          // Add to appropriate permission type
           if (permission === 'context') {
             if (!newMatrix.contextFolders.includes(path)) {
               newMatrix.contextFolders.push(path);
@@ -527,10 +226,7 @@ export class WebServer {
           }
         });
 
-        // Apply the changes
         await filePermissionManager.updatePermissionMatrix(newMatrix);
-
-        // Emit WebSocket update
         if (this.io) {
           this.io.emit('server:permissions-updated', { permissionMatrix: newMatrix });
         }
@@ -552,8 +248,9 @@ export class WebServer {
           res.status(400).json({ error: 'Invalid request format' });
           return;
         }
-
-        const validatedPaths = await Promise.all(paths.map(path => this.validateAndSanitizePath(path)));
+        
+        const { validateAndSanitizePath } = await import('./routers/filesystem.router.js');
+        const validatedPaths = await Promise.all(paths.map(path => validateAndSanitizePath(path)));
         const currentMatrix = filePermissionManager.getPermissionMatrix();
         
         const newMatrix = {
@@ -564,7 +261,6 @@ export class WebServer {
 
         await filePermissionManager.updatePermissionMatrix(newMatrix);
 
-        // Emit WebSocket update
         if (this.io) {
           this.io.emit('server:permissions-updated', { permissionMatrix: newMatrix });
         }
@@ -580,14 +276,13 @@ export class WebServer {
 
     this.app.use('/api', apiRouter);
 
-    // Serve frontend for all other routes (SPA support) - only in production
+    // Serve frontend for all other routes
     this.app.get('*', (req, res) => {
       const distPath = path.join(process.cwd(), '../frontend/dist/index.html');
       import('fs').then(fs => {
         if (fs.existsSync(distPath)) {
           res.sendFile(distPath);
         } else {
-          // In development mode, show info about where to access the frontend
           res.json({
             message: 'MCP Research File Server - API Only',
             frontend: 'http://localhost:3004',
@@ -609,57 +304,17 @@ export class WebServer {
       });
     });
   }
-
-  private async validateAndSanitizePath(requestedPath: string): Promise<string> {
-    const path = await import('path');
-    const os = await import('os');
-    
-    // Default to user home directory if no path provided
-    if (!requestedPath || requestedPath === '') {
-      return os.homedir();
-    }
-    
-    // Resolve and normalize the path
-    const resolvedPath = path.resolve(requestedPath);
-    const normalizedPath = path.normalize(resolvedPath);
-    
-    // Security checks
-    if (normalizedPath.includes('..')) {
-      throw new Error('Directory traversal not allowed');
-    }
-    
-    // Prevent access to system directories on Windows
-    if (process.platform === 'win32') {
-      const systemDirs = ['C:\\Windows', 'C:\\System32', 'C:\\Program Files'];
-      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
-        throw new Error('Access to system directories not allowed');
-      }
-    }
-    
-    // Prevent access to system directories on Unix-like systems
-    if (process.platform !== 'win32') {
-      const systemDirs = ['/etc', '/proc', '/sys', '/dev', '/boot'];
-      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
-        throw new Error('Access to system directories not allowed');
-      }
-    }
-    
-    return normalizedPath;
-  }
-
+  
   private setupSocketHandlers(): void {
     if (!this.io) return;
-
     this.io.on('connection', (socket) => {
       logWithContext.info('WebSocket client connected', { socketId: socket.id });
 
-      // Send initial data
       socket.emit('server:status', {
         status: 'healthy',
         timestamp: new Date().toISOString(),
       });
 
-      // Handle client events
       socket.on('client:request-config', async () => {
         try {
           const permissionMatrix = filePermissionManager.getPermissionMatrix();
@@ -701,10 +356,8 @@ export class WebServer {
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // Create HTTP server
         this.httpServer = createServer(this.app);
 
-        // Setup Socket.IO
         this.io = new SocketIOServer(this.httpServer, {
           cors: {
             origin: "http://localhost:3005",
@@ -712,7 +365,6 @@ export class WebServer {
           }
         });
 
-        // Setup Socket.IO event handlers
         this.setupSocketHandlers();
 
         this.httpServer.listen(config.server.webUIPort, config.server.host, () => {
