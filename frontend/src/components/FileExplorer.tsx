@@ -58,6 +58,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [searchFilters, setSearchFilters] = useState<any>({});
   const [useVirtualization, setUseVirtualization] = useState(false);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [showPermissionPanel, setShowPermissionPanel] = useState(false);
 
   // Initialize undo/redo functionality
   const {
@@ -633,6 +634,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
             <div className="flex items-center space-x-2">
               <button
+                onClick={() => setShowPermissionPanel(true)}
+                className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                <Settings className="w-4 h-4 mr-1" />
+                Assign Permissions
+              </button>
+              <button
                 onClick={() => setSelectedPaths(new Set())}
                 className="px-3 py-2 text-blue-600 hover:text-blue-800"
               >
@@ -719,7 +727,16 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         )}
       </div>
 
-
+      {/* Permission Assignment Panel */}
+      {showPermissionPanel && (
+        <PermissionAssignmentPanel
+          selectedPaths={Array.from(selectedPaths)}
+          onAssign={handlePermissionAssign}
+          onRemove={handlePermissionRemove}
+          onClose={() => setShowPermissionPanel(false)}
+          currentPermissions={currentPermissions}
+        />
+      )}
     </div>
   );
 };
