@@ -4,7 +4,7 @@
   "description": "Frontend - Web UI for MCP Research File Server",
   "type": "module",
   "scripts": {
-    "dev": "vite --port ${FRONTEND_PORT:-3004}",
+    "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

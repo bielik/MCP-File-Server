@@ -18,58 +18,16 @@ export class FilePermissionManager {
   private watchers: Map<string, chokidar.FSWatcher> = new Map();
   private permissionCache: Map<string, { permission: FilePermission; timestamp: number }> = new Map();
   private readonly cacheTimeout = 5 * 60 * 1000; // 5 minutes
-  private readonly settingsFile = path.join(process.cwd(), 'user-settings.json');
+  private readonly settingsFile = path.join(process.cwd(), 'user-settings.json'); // Kept for save path, but loading is removed
 
   constructor(permissionMatrix?: FilePermissionMatrix) {
     this.permissionMatrix = permissionMatrix || config.filePermissions;
-    this.loadUserSettings();
+    // NOTE: The logic for loading user-settings.json has been deliberately removed.
+    // Configuration should be managed via .env and the UI, which calls updatePermissionMatrix.
     this.validatePermissionMatrix();
   }
 
-  /**
-   * Load user settings from disk
-   */
-  private loadUserSettings(): void {
-    try {
-      import('fs').then(fsModule => {
-        if (fsModule.existsSync(this.settingsFile)) {
-          const settingsData = fsModule.readFileSync(this.settingsFile, 'utf8');
-          const userSettings = JSON.parse(settingsData);
-          
-          if (userSettings.permissionMatrix) {
-            // Override default settings with user settings
-            this.permissionMatrix = {
-              contextFolders: userSettings.permissionMatrix.contextFolders || this.permissionMatrix.contextFolders,
-              workingFolders: userSettings.permissionMatrix.workingFolders || this.permissionMatrix.workingFolders,
-              outputFolder: userSettings.permissionMatrix.outputFolder || this.permissionMatrix.outputFolder,
-            };
-            logWithContext.info('User settings loaded', { settingsFile: this.settingsFile });
-          }
-        }
-      }).catch(error => {
-        logWithContext.warn('Failed to load user settings, using defaults', { error: (error as Error).message });
-      });
-    } catch (error) {
-      logWithContext.warn('Failed to load user settings, using defaults', { error: (error as Error).message });
-    }
-  }
 
-  /**
-   * Save user settings to disk
-   */
-  private async saveUserSettings(): Promise<void> {
-    try {
-      const userSettings = {
-        permissionMatrix: this.permissionMatrix,
-        lastModified: new Date().toISOString(),
-      };
-      
-      await fs.writeFile(this.settingsFile, JSON.stringify(userSettings, null, 2), 'utf8');
-      logWithContext.info('User settings saved', { settingsFile: this.settingsFile });
-    } catch (error) {
-      logWithContext.error('Failed to save user settings', error as Error);
-    }
-  }
 
   /**
    * Validate the permission matrix configuration
@@ -532,9 +490,6 @@ export class FilePermissionManager {
     
     this.validatePermissionMatrix();
     this.clearAllPermissionCache();
-    
-    // Save the updated settings to disk
-    await this.saveUserSettings();
     
     logWithContext.info('Permission matrix updated', {
       contextFolders: this.permissionMatrix.contextFolders.length,
