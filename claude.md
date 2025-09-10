@@ -83,3 +83,60 @@ This structure promotes clear separation of concerns and maintainability.
 │       ├── services/           # API and WebSocket services
 │       └── state/              # Zustand store for global state
 └── .env                        # Single source of truth for all configuration
+
+---
+
+# CRITICAL TESTING PRINCIPLE - DO NOT FORGET THIS!
+
+**NEVER mark a test as passing (✅) when it actually fails!** This defeats the entire purpose of testing.
+
+- If a test fails, it **FAILS** ❌ - investigate and fix the issue
+- Tests exist to catch problems - don't rationalize failures away  
+- Marking failed tests as complete creates false confidence and technical debt
+- Always be honest about test results - **integrity in testing is paramount**
+- When Test 4 error handling failed, I should have marked it ❌ and fixed it, not ✅
+
+This lesson learned: 2025-09-10 - Frontend state management refactor testing
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+
+---
+
+# SERVER STARTUP & PORT CONFIGURATION
+
+## How to Run the Servers
+
+### Frontend (React/Vite)
+```bash
+cd frontend
+npm run dev
+```
+- **Port:** 3004 (configured in package.json and vite.config.ts)
+- **URL:** http://localhost:3004
+- **Purpose:** Web UI for file management and MCP server configuration
+
+### Backend (Node.js/Express)
+```bash
+cd backend
+npm run dev:web
+```
+- **Port:** 3001 (configured via webUIPort in config)  
+- **URL:** http://localhost:3001
+- **Purpose:** API server and MCP protocol handler
+
+## Port Configuration Summary
+- **Frontend UI:** http://localhost:3004
+- **Backend API:** http://localhost:3001  
+- **Frontend→Backend:** Frontend makes API calls to localhost:3001/api/*
+- **Connection:** Frontend expects backend to be available on port 3001
+
+## Testing Error Handling
+To test error handling:
+1. Start only frontend: `cd frontend && npm run dev` (port 3004)
+2. Ensure backend is NOT running (no process on port 3001)
+3. Frontend should display error messages when API calls fail
+4. **Current Issue:** Error handling is broken - shows "Connected" even when backend is down
