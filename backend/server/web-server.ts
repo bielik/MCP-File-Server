@@ -11,7 +11,8 @@ import type {
   FileMetadata, 
   FilePermission 
 } from '../types/index.js';
-import { filesystemRouter, validateAndSanitizePath } from './routers/filesystem.router.js';
+import { filesystemRouter } from './routers/filesystem.router.js';
+import { validateAndSanitizePath } from '../utils/file-utils.js';
 
 export class WebServer {
   private app: express.Application;

@@ -1,78 +1,9 @@
 import express from 'express';
 import { filePermissionManager } from '../../files/permissions.js';
 import { logWithContext } from '../../utils/logger.js';
+import { validateAndSanitizePath, isAccessibleDirectory, isDirectoryOrJunction } from '../../utils/file-utils.js';
 
 const router = express.Router();
-
-// Helper functions (previously in WebServer class)
-const isAccessibleDirectory = (entryName: string, fullPath: string): boolean => {
-  if (entryName.startsWith('.') || entryName.startsWith('NTUSER') || entryName.includes('regtrans-ms')) {
-    return false;
-  }
-  const windowsSystemDirs = ['AppData', 'Application Data', 'Local Settings', 'NetHood', 'PrintHood', 'SendTo', 'Start Menu', 'Templates', 'Recent', 'Cookies', 'Favorites', 'My Music', 'My Pictures', 'My Videos', 'My Documents'];
-  if (windowsSystemDirs.includes(entryName)) {
-    return false;
-  }
-  const problematicDirs = ['ntuser.dat.LOG1', 'ntuser.dat.LOG2', 'ntuser.ini', 'Tracing', 'Saved Games', 'Searches'];
-  if (problematicDirs.some(dir => entryName.toLowerCase().includes(dir.toLowerCase()))) {
-    return false;
-  }
-  const userProfile = process.env.USERPROFILE || '';
-  if (fullPath.startsWith(userProfile)) {
-    const commonUserDirs = ['Documents', 'Downloads', 'Desktop', 'Pictures', 'Music', 'Videos', 'OneDrive', 'Dropbox', 'Google Drive', 'iCloud Drive'];
-    const isCommonDir = commonUserDirs.some(dir => entryName === dir || entryName.startsWith(dir + ' ') || entryName.startsWith(dir + '-'));
-    if (isCommonDir) {
-      return true;
-    }
-    return !entryName.startsWith('NTUSER') && !entryName.includes('.dat') && !entryName.includes('.log');
-  }
-  return true;
-};
-
-const isDirectoryOrJunction = async (path: string): Promise<{ isDirectory: boolean; stats: any }> => {
-  const fs = await import('fs/promises');
-  try {
-    const stats = await fs.lstat(path);
-    let isDirectory = stats.isDirectory();
-    if (!isDirectory && stats.isSymbolicLink()) {
-      try {
-        const realStats = await fs.stat(path);
-        isDirectory = realStats.isDirectory();
-      } catch {
-        isDirectory = false;
-      }
-    }
-    return { isDirectory, stats };
-  } catch (error) {
-    return { isDirectory: false, stats: null };
-  }
-};
-
-const validateAndSanitizePath = async (requestedPath: string): Promise<string> => {
-    const path = await import('path');
-    const os = await import('os');
-    if (!requestedPath || requestedPath === '') {
-      return os.homedir();
-    }
-    const resolvedPath = path.resolve(requestedPath);
-    const normalizedPath = path.normalize(resolvedPath);
-    if (normalizedPath.includes('..')) {
-      throw new Error('Directory traversal not allowed');
-    }
-    if (process.platform === 'win32') {
-      const systemDirs = ['C:\\Windows', 'C:\\System32', 'C:\\Program Files'];
-      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
-        throw new Error('Access to system directories not allowed');
-      }
-    }
-    if (process.platform !== 'win32') {
-      const systemDirs = ['/etc', '/proc', '/sys', '/dev', '/boot'];
-      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
-        throw new Error('Access to system directories not allowed');
-      }
-    }
-    return normalizedPath;
-};
 
 
 // Path validation endpoints
@@ -280,4 +211,3 @@ router.get('/tree', async (req, res) => {
 
 
 export const filesystemRouter = router;
-export { validateAndSanitizePath };

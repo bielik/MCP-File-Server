@@ -335,6 +335,92 @@ export function getFileType(filePath: string): string {
   return typeMap[ext] || 'other';
 }
 
+// Filesystem browsing utilities (shared between web-server and filesystem router)
+import os from 'os';
+
+/**
+ * Validates and sanitizes a path for filesystem browsing to prevent directory traversal and access to system folders.
+ * @param requestedPath The path to validate.
+ * @returns A normalized, absolute path.
+ */
+export const validateAndSanitizePath = async (requestedPath: string): Promise<string> => {
+    if (!requestedPath || requestedPath === '') {
+      return os.homedir();
+    }
+    const resolvedPath = path.resolve(requestedPath);
+    const normalizedPath = path.normalize(resolvedPath);
+
+    if (normalizedPath.includes('..')) {
+      throw new Error('Directory traversal not allowed');
+    }
+
+    if (process.platform === 'win32') {
+      const systemDirs = ['C:\\Windows', 'C:\\System32', 'C:\\Program Files'];
+      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
+        throw new Error('Access to system directories not allowed');
+      }
+    } else {
+      const systemDirs = ['/etc', '/proc', '/sys', '/dev', '/boot'];
+      if (systemDirs.some(sysDir => normalizedPath.startsWith(sysDir))) {
+        throw new Error('Access to system directories not allowed');
+      }
+    }
+    return normalizedPath;
+};
+
+/**
+ * Checks if a directory entry is generally accessible and not a system or hidden file.
+ * @param entryName The name of the file or directory.
+ * @param fullPath The full path to the entry.
+ * @returns True if the directory is accessible.
+ */
+export const isAccessibleDirectory = (entryName: string, fullPath: string): boolean => {
+  if (entryName.startsWith('.') || entryName.startsWith('NTUSER') || entryName.includes('regtrans-ms')) {
+    return false;
+  }
+  const windowsSystemDirs = ['AppData', 'Application Data', 'Local Settings', 'NetHood', 'PrintHood', 'SendTo', 'Start Menu', 'Templates', 'Recent', 'Cookies', 'Favorites', 'My Music', 'My Pictures', 'My Videos', 'My Documents'];
+  if (windowsSystemDirs.includes(entryName)) {
+    return false;
+  }
+  const problematicDirs = ['ntuser.dat.LOG1', 'ntuser.dat.LOG2', 'ntuser.ini', 'Tracing', 'Saved Games', 'Searches'];
+  if (problematicDirs.some(dir => entryName.toLowerCase().includes(dir.toLowerCase()))) {
+    return false;
+  }
+  const userProfile = process.env.USERPROFILE || '';
+  if (fullPath.startsWith(userProfile)) {
+    const commonUserDirs = ['Documents', 'Downloads', 'Desktop', 'Pictures', 'Music', 'Videos', 'OneDrive', 'Dropbox', 'Google Drive', 'iCloud Drive'];
+    const isCommonDir = commonUserDirs.some(dir => entryName === dir || entryName.startsWith(dir + ' ') || entryName.startsWith(dir + '-'));
+    if (isCommonDir) {
+      return true;
+    }
+    return !entryName.startsWith('NTUSER') && !entryName.includes('.dat') && !entryName.includes('.log');
+  }
+  return true;
+};
+
+/**
+ * Determines if a path points to a directory or a symbolic link pointing to a directory.
+ * @param path The path to check.
+ * @returns An object indicating if it's a directory and its stats.
+ */
+export const isDirectoryOrJunction = async (path: string): Promise<{ isDirectory: boolean; stats: any }> => {
+  try {
+    const stats = await fs.lstat(path);
+    let isDirectory = stats.isDirectory();
+    if (!isDirectory && stats.isSymbolicLink()) {
+      try {
+        const realStats = await fs.stat(path);
+        isDirectory = realStats.isDirectory();
+      } catch {
+        isDirectory = false;
+      }
+    }
+    return { isDirectory, stats };
+  } catch (error) {
+    return { isDirectory: false, stats: null };
+  }
+};
+
 // Export utility functions
 export default {
   validatePath,
@@ -348,4 +434,7 @@ export default {
   getFolderStructure,
   getFileType,
   ensureDirectoryExists,
+  validateAndSanitizePath,
+  isAccessibleDirectory,
+  isDirectoryOrJunction,
 };
