@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { config } from '../config/index.js';
+import { config, urls } from '../config/index.js';
 import { filePermissionManager } from '../files/permissions.js';
 import { logWithContext } from '../utils/logger.js';
 import type { 
@@ -284,8 +284,8 @@ export class WebServer {
         } else {
           res.json({
             message: 'MCP Research File Server - API Only',
-            frontend: 'http://localhost:3004',
-            api: 'http://localhost:3003/api',
+            frontend: urls.frontend,
+            api: urls.api,
             endpoints: {
               health: '/api/health',
               config: '/api/config',
@@ -297,8 +297,8 @@ export class WebServer {
       }).catch(() => {
         res.json({
           message: 'MCP Research File Server - API Only',
-          frontend: 'http://localhost:3004',
-          api: 'http://localhost:3003/api'
+          frontend: urls.frontend,
+          api: urls.api
         });
       });
     });
@@ -359,7 +359,7 @@ export class WebServer {
 
         this.io = new SocketIOServer(this.httpServer, {
           cors: {
-            origin: "http://localhost:3005",
+            origin: urls.frontend,
             methods: ["GET", "POST"]
           }
         });

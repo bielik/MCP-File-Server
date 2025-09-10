@@ -11,7 +11,7 @@ async function debugUI() {
     console.log('🔍 Debugging MCP File Server UI navigation...');
     
     // Navigate to the frontend
-    await page.goto('http://localhost:3004', { waitUntil: 'networkidle' });
+    await page.goto(`http://localhost:${process.env.FRONTEND_PORT || 3004}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
     
     console.log('📄 Current page title:', await page.title());

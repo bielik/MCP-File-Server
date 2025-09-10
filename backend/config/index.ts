@@ -9,8 +9,8 @@ import {
   FilePermissionMatrix,
 } from '../types/index.js';
 
-// Load environment variables
-dotenvConfig();
+// Load environment variables from project root
+dotenvConfig({ path: path.resolve(process.cwd(), '..', '.env') });
 
 // Environment validation schema
 const envSchema = z.object({
@@ -18,6 +18,7 @@ const envSchema = z.object({
   MCP_PORT: z.string().transform(Number).pipe(z.number().min(1000).max(65535)).default('3000'),
   MCP_HOST: z.string().default('localhost'),
   WEB_UI_PORT: z.string().transform(Number).pipe(z.number().min(1000).max(65535)).default('3001'),
+  FRONTEND_PORT: z.string().transform(Number).pipe(z.number().min(1000).max(65535)).default('3004'),
 
   // File System
   CONTEXT_FOLDERS: z.string().default(''),
@@ -60,6 +61,7 @@ const env = envSchema.parse(process.env);
 export const serverConfig: ServerConfig = {
   mcpPort: env.MCP_PORT,
   webUIPort: env.WEB_UI_PORT,
+  frontendPort: env.FRONTEND_PORT,
   host: env.MCP_HOST,
   enableCaching: env.ENABLE_CACHING,
   cacheTTL: env.CACHE_TTL,
@@ -179,6 +181,15 @@ export const isDevelopment = process.env.NODE_ENV === 'development';
 export const isProduction = process.env.NODE_ENV === 'production';
 export const isTest = process.env.NODE_ENV === 'test';
 
+// URL Generation Helpers
+export const urls = {
+  frontend: `http://${serverConfig.host}:${serverConfig.frontendPort}`,
+  backend: `http://${serverConfig.host}:${serverConfig.webUIPort}`,
+  api: `http://${serverConfig.host}:${serverConfig.webUIPort}/api`,
+  websocket: `http://${serverConfig.host}:${serverConfig.webUIPort}`,
+  mcp: `http://${serverConfig.host}:${serverConfig.mcpPort}`,
+};
+
 // Export all configurations
 export const config = {
   server: serverConfig,
@@ -186,6 +197,7 @@ export const config = {
   mclip: mclipConfig,
   processing: processingConfig,
   filePermissions: filePermissionMatrix,
+  urls,
   isDevelopment,
   isProduction,
   isTest,

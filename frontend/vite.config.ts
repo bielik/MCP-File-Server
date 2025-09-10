@@ -20,19 +20,19 @@ export default defineConfig({
 
   // Development server configuration
   server: {
-    port: 3004,
+    port: Number(process.env.FRONTEND_PORT) || 3004,
     host: true,
     strictPort: true,
     
     // Proxy API calls to the backend server
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: `http://localhost:${process.env.WEB_UI_PORT || 3002}`,
         changeOrigin: true,
         secure: false,
       },
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: `http://localhost:${process.env.WEB_UI_PORT || 3002}`,
         changeOrigin: true,
         ws: true,
       },
@@ -58,6 +58,6 @@ export default defineConfig({
 
   // Environment variables
   define: {
-    __API_BASE_URL__: JSON.stringify(process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001'),
+    __API_BASE_URL__: JSON.stringify(process.env.NODE_ENV === 'production' ? '' : `http://localhost:${process.env.WEB_UI_PORT || 3002}`),
   },
 });

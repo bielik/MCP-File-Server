@@ -115,8 +115,8 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 cd frontend
 npm run dev
 ```
-- **Port:** 3004 (configured in package.json and vite.config.ts)
-- **URL:** http://localhost:3004
+- **Port:** Configured via FRONTEND_PORT environment variable (default: 3004)
+- **URL:** http://localhost:{FRONTEND_PORT}
 - **Purpose:** Web UI for file management and MCP server configuration
 
 ### Backend (Node.js/Express)
@@ -124,19 +124,24 @@ npm run dev
 cd backend
 npm run dev:web
 ```
-- **Port:** 3001 (configured via webUIPort in config)  
-- **URL:** http://localhost:3001
+- **Port:** Configured via WEB_UI_PORT environment variable (default: 3001)
+- **URL:** http://localhost:{WEB_UI_PORT}
 - **Purpose:** API server and MCP protocol handler
 
 ## Port Configuration Summary
-- **Frontend UI:** http://localhost:3004
-- **Backend API:** http://localhost:3001  
-- **Frontend→Backend:** Frontend makes API calls to localhost:3001/api/*
-- **Connection:** Frontend expects backend to be available on port 3001
+All ports are centrally configured in the `.env` file:
+- `FRONTEND_PORT=3004` - Frontend development server port
+- `WEB_UI_PORT=3001` - Backend web server port
+- `MCP_PORT=3005` - MCP protocol server port
+
+- **Frontend UI:** http://localhost:{FRONTEND_PORT}
+- **Backend API:** http://localhost:{WEB_UI_PORT}
+- **Frontend→Backend:** Frontend makes API calls to localhost:{WEB_UI_PORT}/api/*
+- **Connection:** Frontend expects backend to be available on configured WEB_UI_PORT
 
 ## Testing Error Handling
 To test error handling:
-1. Start only frontend: `cd frontend && npm run dev` (port 3004)
+1. Start only frontend: `cd frontend && npm run dev` (uses FRONTEND_PORT)
 2. Ensure backend is NOT running (no process on port 3001)
 3. Frontend should display error messages when API calls fail
 4. **Current Issue:** Error handling is broken - shows "Connected" even when backend is down

@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
-const PORT = 3007;
+const PORT = process.env.TEST_PORT || 3007;
 
 // Permission storage - simple JSON file-based system
 const PERMISSIONS_FILE = path.join(process.cwd(), 'file-permissions.json');
@@ -67,7 +67,7 @@ await loadPermissions();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: ["http://localhost:3004", "http://localhost:3005"],
+    origin: [`http://localhost:${process.env.FRONTEND_PORT || 3004}`, `http://localhost:${process.env.MCP_PORT || 3005}`],
     methods: ["GET", "POST"],
     credentials: true
   },

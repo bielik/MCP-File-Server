@@ -17,7 +17,7 @@ async function debugPermissions() {
   try {
     console.log('🔍 Debugging permission data...');
     
-    await page.goto('http://localhost:3004', { waitUntil: 'networkidle' });
+    await page.goto(`http://localhost:${process.env.FRONTEND_PORT || 3004}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
     
     // Inspect the permission data structure

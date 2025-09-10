@@ -10,6 +10,7 @@ interface ServerConfig {
   serverConfig: {
     mcpPort: number;
     webUIPort: number;
+    frontendPort: number;
     enableCaching: boolean;
     logLevel: string;
   };

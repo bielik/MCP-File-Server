@@ -11,7 +11,7 @@ async function debugTabs() {
     console.log('🔍 Debugging tab navigation...');
     
     // Navigate to the frontend
-    await page.goto('http://localhost:3004', { waitUntil: 'networkidle' });
+    await page.goto(`http://localhost:${process.env.FRONTEND_PORT || 3004}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
     
     // Log all available tabs/buttons

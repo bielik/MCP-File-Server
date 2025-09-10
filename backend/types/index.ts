@@ -157,6 +157,7 @@ export interface ProcessingConfig {
 export interface ServerConfig {
   mcpPort: number;
   webUIPort: number;
+  frontendPort: number;
   host: string;
   enableCaching: boolean;
   cacheTTL: number;            // In seconds

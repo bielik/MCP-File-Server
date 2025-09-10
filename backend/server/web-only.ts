@@ -40,7 +40,7 @@ class WebOnlyServer {
 
       console.log(`✅ MCP Research File Server is running!`);
       console.log(`📊 Backend API: http://${config.server.host}:${config.server.webUIPort}`);
-      console.log(`🎨 Frontend UI: http://${config.server.host}:3002`);
+      console.log(`🎨 Frontend UI: http://${config.server.host}:${config.server.frontendPort}`);
       console.log(`📝 Use the frontend to configure file permissions and monitor the MCP server`);
 
     } catch (error) {
