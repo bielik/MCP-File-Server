@@ -158,3 +158,5 @@ backend/user-settings.json
 
 # Claude Code settings
 .claude/settings.local.json
+.claude/agents/
+

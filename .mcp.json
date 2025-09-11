@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "mcp-research-file-server": {
+      "command": "node",
+      "args": ["C:/Users/MartinBielik/Dev/MCPFileServer/backend/dist/server/index.js", "--mcp-only"],
+      "env": {
+        "NODE_ENV": "production",
+        "MCP_MODE": "stdio",
+        "DOTENV_CONFIG_PATH": "C:/Users/MartinBielik/Dev/MCPFileServer/.env",
+        "OUTPUT_FOLDER": "C:/Users/MartinBielik/Dev/MCPFileServer/output",
+        "CONTEXT_FOLDERS": "",
+        "WORKING_FOLDERS": "",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

@@ -84,25 +84,6 @@ This structure promotes clear separation of concerns and maintainability.
 │       └── state/              # Zustand store for global state
 └── .env                        # Single source of truth for all configuration
 
----
-
-# CRITICAL TESTING PRINCIPLE - DO NOT FORGET THIS!
-
-**NEVER mark a test as passing (✅) when it actually fails!** This defeats the entire purpose of testing.
-
-- If a test fails, it **FAILS** ❌ - investigate and fix the issue
-- Tests exist to catch problems - don't rationalize failures away  
-- Marking failed tests as complete creates false confidence and technical debt
-- Always be honest about test results - **integrity in testing is paramount**
-- When Test 4 error handling failed, I should have marked it ❌ and fixed it, not ✅
-
-This lesson learned: 2025-09-10 - Frontend state management refactor testing
-
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 
 ---
 

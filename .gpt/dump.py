@@ -9,7 +9,7 @@ exclude_folders = [
     'build', 'dist', 'bin', 'obj', '.git', '.github', '.gpt', '.idea', '.vscode',
     'coverage', '.coverage', '.tox', '.eggs', 'eggs', '.gradle', '.svn', '.DS_Store',
     'tileset', 'postgres_data', 'data', 'datasets', 'logs', 'doc', 'docs', 'tmp', 'temp', '.dump.log',
-    'tests'
+    'tests', '.claude'
 ]
 
 # Allowed file extensions
