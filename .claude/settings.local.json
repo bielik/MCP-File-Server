@@ -44,7 +44,8 @@
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
       "Bash(start http://localhost:3007)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

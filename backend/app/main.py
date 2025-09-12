@@ -1,10 +1,17 @@
 import os
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import json
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.database import create_db_and_tables
 from app.api.endpoints import router as api_router
 from app.api.websockets import ConnectionManager
+
+# Import MCP services and schemas
+from app.services import mcp_service, file_service
+from app.schemas import mcp as mcp_schemas
 
 app = FastAPI(title="MCP KnowledgeExplorer Hub")
 
@@ -12,7 +19,7 @@ app = FastAPI(title="MCP KnowledgeExplorer Hub")
 origins = [
     f"http://localhost",
     f"http://localhost:{os.getenv('FRONTEND_PORT', 5173)}",
-    f"[http://127.0.0.1](http://127.0.0.1):{os.getenv('FRONTEND_PORT', 5173)}",
+    f"http://127.0.0.1:{os.getenv('FRONTEND_PORT', 5173)}",
 ]
 
 app.add_middleware(
@@ -27,6 +34,13 @@ app.add_middleware(
 ui_manager = ConnectionManager()
 mcp_manager = ConnectionManager()
 
+# Map tool names to their implementation
+tool_map = {
+    "read_file": file_service.read_file,
+    "list_files": file_service.list_files,
+    "write_file": file_service.write_file,
+}
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
@@ -36,6 +50,129 @@ app.include_router(api_router, prefix="/api")
 @app.get("/")
 def read_root():
     return {"message": "MCP KnowledgeExplorer Hub is running."}
+
+async def process_mcp_request(request_data: dict) -> dict:
+    """Process an MCP JSON-RPC request and return the response."""
+    request_id = request_data.get("id")
+    
+    try:
+        # Basic JSON-RPC validation
+        if not all(k in request_data for k in ["jsonrpc", "method"]):
+            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32600, "message": "Invalid Request"}}
+        if request_data["jsonrpc"] != "2.0":
+            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32600, "message": "Invalid Request"}}
+
+        method = request_data["method"]
+        params = request_data.get("params", {})
+
+        # Log activity to UI
+        await ui_manager.broadcast(f"MCP Request: {method} | Params: {json.dumps(params)}")
+
+        # --- MCP Method Router ---
+        if method == "initialize":
+            # MCP initialization handshake
+            init_result = {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {},
+                    "resources": {},
+                    "prompts": {},
+                    "logging": {}
+                },
+                "serverInfo": {
+                    "name": "MCP KnowledgeExplorer Hub",
+                    "version": "1.0.0"
+                }
+            }
+            return {"jsonrpc": "2.0", "id": request_id, "result": init_result}
+
+        elif method == "initialized":
+            # Client confirms initialization complete - no response needed
+            await ui_manager.broadcast("MCP Client initialized successfully.")
+            return {"jsonrpc": "2.0", "id": request_id, "result": {}}
+
+        elif method == "tools/list":
+            tools = mcp_service.get_tools()
+            return {"jsonrpc": "2.0", "id": request_id, "result": tools}
+
+        elif method == "tools/call":
+            tool_call = mcp_schemas.ToolCallParams(**params)
+            tool_name = tool_call.tool_name
+            
+            if tool_name not in tool_map:
+                return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": f"Tool '{tool_name}' not found"}}
+            
+            # Execute the tool
+            tool_function = tool_map[tool_name]
+            result_content = tool_function(**tool_call.arguments)
+            
+            tool_result = mcp_schemas.ToolResult(content=result_content)
+            await ui_manager.broadcast(f"MCP Success: {tool_name} executed.")
+            return {"jsonrpc": "2.0", "id": request_id, "result": tool_result.model_dump()}
+
+        else:
+            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": f"Method '{method}' not found"}}
+
+    except (ValidationError, ValueError) as e:
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": "Invalid params", "data": str(e)}}
+    except PermissionError as e:
+        await ui_manager.broadcast(f"MCP Error: Permission Denied - {e}")
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32001, "message": "Permission Denied", "data": str(e)}}
+    except FileNotFoundError as e:
+        await ui_manager.broadcast(f"MCP Error: File Not Found - {e}")
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32002, "message": "File Not Found", "data": str(e)}}
+    except Exception as e:
+        # Catch-all for unexpected server errors
+        await ui_manager.broadcast(f"MCP Error: Internal Server Error - {e}")
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": "Internal error", "data": str(e)}}
+
+@app.post("/mcp")
+async def mcp_http_endpoint(request: Request):
+    """HTTP MCP endpoint for Claude Code integration."""
+    try:
+        body = await request.body()
+        request_data = json.loads(body)
+        
+        # Handle single request
+        if isinstance(request_data, dict):
+            response = await process_mcp_request(request_data)
+            return JSONResponse(content=response)
+        
+        # Handle batch requests
+        elif isinstance(request_data, list):
+            responses = []
+            for req in request_data:
+                if isinstance(req, dict):
+                    responses.append(await process_mcp_request(req))
+                else:
+                    responses.append({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}})
+            return JSONResponse(content=responses)
+        
+        else:
+            return JSONResponse(
+                content={"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}},
+                status_code=400
+            )
+            
+    except json.JSONDecodeError:
+        return JSONResponse(
+            content={"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}},
+            status_code=400
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={"jsonrpc": "2.0", "id": None, "error": {"code": -32603, "message": "Internal error", "data": str(e)}},
+            status_code=500
+        )
+
+@app.get("/ws/mcp")
+def mcp_endpoint_info():
+    return {
+        "message": "MCP WebSocket endpoint available", 
+        "protocol": "WebSocket", 
+        "upgrade": "required",
+        "mcp_version": "2024-11-05"
+    }
 
 @app.websocket("/ws/ui")
 async def websocket_ui_endpoint(websocket: WebSocket):
@@ -51,22 +188,115 @@ async def websocket_ui_endpoint(websocket: WebSocket):
         print("UI Client disconnected")
 
 
+async def send_mcp_error(websocket: WebSocket, error: mcp_schemas.JsonRpcError, request_id: int | str | None = None):
+    response = mcp_schemas.JsonRpcResponse(id=request_id, error=error)
+    await mcp_manager.send_personal_message(response.model_dump_json(exclude_none=True), websocket)
+
+@app.websocket("/ws/test")
+async def websocket_test_endpoint(websocket: WebSocket):
+    print("TEST: WebSocket connection!")
+    await websocket.accept()
+    await websocket.send_text("Hello from test endpoint!")
+    await websocket.close()
+
 @app.websocket("/ws/mcp")
 async def websocket_mcp_endpoint(websocket: WebSocket):
-    await mcp_manager.connect(websocket)
+    import sys
+    print(f"[MCP] Connection attempt from {websocket.client}", flush=True, file=sys.stderr)
+    print(f"[MCP] Headers: {dict(websocket.headers)}", flush=True, file=sys.stderr)
+    
+    await websocket.accept()
+    print(f"[MCP] WebSocket accepted", flush=True, file=sys.stderr)
+    
+    mcp_manager.active_connections.append(websocket)
+    print(f"[MCP] Added to connection pool", flush=True, file=sys.stderr)
     try:
         while True:
+            print(f"[MCP] Waiting for message...", flush=True, file=sys.stderr)
             data = await websocket.receive_text()
-            # This is where MCP protocol logic would go
-            # For now, we log the tool call and echo back
-            print(f"Received MCP call: {data}")
-            
-            # Simulate logging to the UI
-            await ui_manager.broadcast(f"MCP Activity: {data}")
+            print(f"[MCP] Received: {data}", flush=True, file=sys.stderr)
+            request_id = None
+            try:
+                request_data = json.loads(data)
+                request_id = request_data.get("id")
 
-            # Send result back to AI client
-            await mcp_manager.send_personal_message(f"Result for '{data}'", websocket)
+                # Basic JSON-RPC validation
+                if not all(k in request_data for k in ["jsonrpc", "method"]):
+                    raise ValueError("Missing required JSON-RPC fields.")
+                if request_data["jsonrpc"] != "2.0":
+                    raise ValueError("Invalid JSON-RPC version.")
+
+                method = request_data["method"]
+                params = request_data.get("params", {})
+
+                # Log activity to UI
+                await ui_manager.broadcast(f"MCP Request: {method} | Params: {json.dumps(params)}")
+
+                # --- MCP Method Router ---
+                if method == "initialize":
+                    # MCP initialization handshake
+                    init_result = {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                            "resources": {},
+                            "prompts": {},
+                            "logging": {}
+                        },
+                        "serverInfo": {
+                            "name": "MCP KnowledgeExplorer Hub",
+                            "version": "1.0.0"
+                        }
+                    }
+                    response = mcp_schemas.JsonRpcResponse(id=request_id, result=init_result)
+                    await mcp_manager.send_personal_message(response.model_dump_json(by_alias=True), websocket)
+
+                elif method == "initialized":
+                    # Client confirms initialization complete - no response needed
+                    await ui_manager.broadcast("MCP Client initialized successfully.")
+
+                elif method == "tools/list":
+                    tools = mcp_service.get_tools()
+                    response = mcp_schemas.JsonRpcResponse(id=request_id, result=tools)
+                    await mcp_manager.send_personal_message(response.model_dump_json(by_alias=True), websocket)
+
+                elif method == "tools/call":
+                    tool_call = mcp_schemas.ToolCallParams(**params)
+                    tool_name = tool_call.tool_name
+                    
+                    if tool_name not in tool_map:
+                        raise ValueError(f"Tool '{tool_name}' not found.")
+                    
+                    # Execute the tool
+                    tool_function = tool_map[tool_name]
+                    result_content = tool_function(**tool_call.arguments)
+                    
+                    tool_result = mcp_schemas.ToolResult(content=result_content)
+                    response = mcp_schemas.JsonRpcResponse(id=request_id, result=tool_result)
+                    await mcp_manager.send_personal_message(response.model_dump_json(), websocket)
+                    await ui_manager.broadcast(f"MCP Success: {tool_name} executed.")
+
+                else:
+                    raise ValueError(f"Method '{method}' not found.")
+
+            except json.JSONDecodeError:
+                await send_mcp_error(websocket, mcp_schemas.JsonRpcError.parse_error())
+            except (ValidationError, ValueError) as e:
+                await send_mcp_error(websocket, mcp_schemas.JsonRpcError.invalid_params(str(e)), request_id)
+            except PermissionError as e:
+                error = mcp_schemas.JsonRpcError(code=-32001, message="Permission Denied", data=str(e))
+                await send_mcp_error(websocket, error, request_id)
+                await ui_manager.broadcast(f"MCP Error: Permission Denied - {e}")
+            except FileNotFoundError as e:
+                error = mcp_schemas.JsonRpcError(code=-32002, message="File Not Found", data=str(e))
+                await send_mcp_error(websocket, error, request_id)
+                await ui_manager.broadcast(f"MCP Error: File Not Found - {e}")
+            except Exception as e:
+                # Catch-all for unexpected server errors
+                await send_mcp_error(websocket, mcp_schemas.JsonRpcError.internal_error(str(e)), request_id)
+                await ui_manager.broadcast(f"MCP Error: Internal Server Error - {e}")
 
     except WebSocketDisconnect:
         mcp_manager.disconnect(websocket)
-        print("MCP Client disconnected")
+        print(f"MCP Client disconnected: {websocket.client}")
+        await ui_manager.broadcast("MCP Client disconnected.")
