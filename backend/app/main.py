@@ -74,7 +74,9 @@ async def process_mcp_request(request_data: dict) -> dict:
             init_result = {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {
-                    "tools": {},
+                    "tools": {
+                        "listChanged": True
+                    },
                     "resources": {},
                     "prompts": {},
                     "logging": {}
@@ -240,7 +242,9 @@ async def websocket_mcp_endpoint(websocket: WebSocket):
                     init_result = {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {
-                            "tools": {},
+                            "tools": {
+                                "listChanged": True
+                            },
                             "resources": {},
                             "prompts": {},
                             "logging": {}
