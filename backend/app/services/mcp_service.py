@@ -6,26 +6,50 @@ def get_tools() -> List[mcp_schemas.ToolDefinition]:
     
     tools = [
         mcp_schemas.ToolDefinition(
-            toolName="read_file",
+            name="read_file",
             description="Reads the entire content of a specified file.",
-            parameters=[
-                mcp_schemas.ToolParameter(name="path", type="string", description="The relative path to the file from the shared directory root.")
-            ]
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The relative path to the file from the shared directory root."
+                    }
+                },
+                "required": ["path"]
+            }
         ),
         mcp_schemas.ToolDefinition(
-            toolName="list_files",
+            name="list_files",
             description="Lists all files and subdirectories in a specified directory.",
-            parameters=[
-                mcp_schemas.ToolParameter(name="path", type="string", description="The relative path to the directory from the shared directory root.")
-            ]
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The relative path to the directory from the shared directory root."
+                    }
+                },
+                "required": ["path"]
+            }
         ),
         mcp_schemas.ToolDefinition(
-            toolName="write_file",
+            name="write_file",
             description="Writes content to a specified file, overwriting it if it exists or creating it if it does not.",
-            parameters=[
-                mcp_schemas.ToolParameter(name="path", type="string", description="The relative path to the file to be written."),
-                mcp_schemas.ToolParameter(name="content", type="string", description="The content to write into the file.")
-            ]
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The relative path to the file to be written."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The content to write into the file."
+                    }
+                },
+                "required": ["path", "content"]
+            }
         )
     ]
     return tools

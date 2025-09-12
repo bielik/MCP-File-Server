@@ -6,8 +6,8 @@
 **Purpose:** A sophisticated, local-first Model Context Protocol server that enables AI agents to assist with research, providing a web-based UI for configuration, real-time monitoring, and granular permission management over the local file system.
 
 ## 🎉 MAJOR MILESTONE: MCP Protocol Implementation Complete
-**Status:** ✅ **FULLY OPERATIONAL MCP SERVER**  
-The core MCP server is now successfully implemented with complete JSON-RPC 2.0 support, file system tools, and security controls. AI agents can connect and perform file operations safely.
+**Status:** ✅ **FULLY OPERATIONAL MCP SERVER ("wisdom")**  
+The core MCP server is now successfully implemented with complete JSON-RPC 2.0 support, file system tools, and security controls. AI agents can connect and perform file operations safely. The server is registered in Claude Code as "wisdom" for easy reference.
 
 **Key Achievements:**
 - ✅ Complete MCP JSON-RPC 2.0 protocol implementation
@@ -223,20 +223,37 @@ Key configuration options in `.env`:
 
 ## Common Tasks and Commands
 
+### Setting Up MCP Connection with Claude Code ✅
+```bash
+# Add the MCP server to Claude Code (HTTP transport - recommended)
+claude mcp add --transport http wisdom http://localhost:8000/mcp
+
+# Verify connection
+claude mcp list
+
+# Remove if needed
+claude mcp remove wisdom -s local
+```
+
 ### Testing MCP Connection ✅
 ```bash
-# Test WebSocket MCP connection
-wscat -c ws://localhost:8000/ws/mcp
-
-# Send initialization
-{"jsonrpc": "2.0", "method": "initialize", "params": {"version": "2024-11-05"}, "id": 1}
+# Test HTTP MCP connection (recommended)
+curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "initialize", "params": {"version": "2024-11-05"}, "id": 1}'
 
 # List tools
-{"jsonrpc": "2.0", "method": "tools/list", "id": 2}
+curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 2}'
 
-# Test file operation
-{"jsonrpc": "2.0", "method": "tools/call", "params": {"toolName": "read_file", "arguments": {"path": "docs/sample.txt"}}, "id": 3}
+# Test file operation (note: uses "name" not "toolName")
+curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "read_file", "arguments": {"path": "docs/test.txt"}}, "id": 3}'
 ```
+
+**Note:** The server is registered as "wisdom" in Claude Code and provides the following MCP tools:
+- `mcp__wisdom__read_file` - Read file contents with permission checking
+- `mcp__wisdom__list_files` - List directory contents  
+- `mcp__wisdom__write_file` - Write file contents (subject to permissions)
 
 ### Backend Development
 ```bash
@@ -314,11 +331,13 @@ docker-compose logs -f
 5. **Developer Experience:** Hot-reload, clear logs, accessible documentation
 
 ## Success Metrics ✅
-- **AI Agent Connection:** Successfully tested with WebSocket and HTTP clients
-- **Protocol Compliance:** Full JSON-RPC 2.0 and MCP 2024-11-05 specification adherence
-- **Security Validation:** Path traversal prevention and permission checking working
+- **Claude Code Integration:** Successfully connected as "wisdom" MCP server via HTTP transport
+- **Tool Discovery:** All 3 tools (`read_file`, `list_files`, `write_file`) properly discovered by Claude Code
+- **Protocol Compliance:** Full JSON-RPC 2.0 and MCP 2024-11-05 specification adherence with correct schema format
+- **Tool Execution:** Successfully tested file operations through Claude Code MCP interface
+- **Security Validation:** Path traversal prevention and permission checking working (write operations properly blocked)
 - **Real-time Updates:** UI receives live activity feed from MCP operations
-- **Error Handling:** Comprehensive error responses with proper JSON-RPC codes
+- **Error Handling:** Comprehensive error responses with proper JSON-RPC codes (-32001 Permission Denied, -32002 File Not Found)
 - **Development Workflow:** Hot-reload development environment fully operational
 
 ## Getting Help

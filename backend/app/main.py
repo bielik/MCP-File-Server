@@ -97,11 +97,11 @@ async def process_mcp_request(request_data: dict) -> dict:
             tools = mcp_service.get_tools()
             # Convert ToolDefinition objects to dictionaries with proper field names
             tools_dict = [tool.model_dump(by_alias=True) for tool in tools]
-            return {"jsonrpc": "2.0", "id": request_id, "result": tools_dict}
+            return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools_dict}}
 
         elif method == "tools/call":
             tool_call = mcp_schemas.ToolCallParams(**params)
-            tool_name = tool_call.tool_name
+            tool_name = tool_call.name
             
             if tool_name not in tool_map:
                 return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": f"Tool '{tool_name}' not found"}}
@@ -110,7 +110,9 @@ async def process_mcp_request(request_data: dict) -> dict:
             tool_function = tool_map[tool_name]
             result_content = tool_function(**tool_call.arguments)
             
-            tool_result = mcp_schemas.ToolResult(content=result_content)
+            # Convert result to text part format
+            text_part = mcp_schemas.TextPart(text=str(result_content))
+            tool_result = mcp_schemas.ToolResult(content=[text_part])
             await ui_manager.broadcast(f"MCP Success: {tool_name} executed.")
             return {"jsonrpc": "2.0", "id": request_id, "result": tool_result.model_dump()}
 
@@ -263,12 +265,14 @@ async def websocket_mcp_endpoint(websocket: WebSocket):
 
                 elif method == "tools/list":
                     tools = mcp_service.get_tools()
-                    response = mcp_schemas.JsonRpcResponse(id=request_id, result=tools)
+                    # Convert ToolDefinition objects to dictionaries with proper field names
+                    tools_dict = [tool.model_dump(by_alias=True) for tool in tools]
+                    response = mcp_schemas.JsonRpcResponse(id=request_id, result={"tools": tools_dict})
                     await mcp_manager.send_personal_message(response.model_dump_json(by_alias=True), websocket)
 
                 elif method == "tools/call":
                     tool_call = mcp_schemas.ToolCallParams(**params)
-                    tool_name = tool_call.tool_name
+                    tool_name = tool_call.name
                     
                     if tool_name not in tool_map:
                         raise ValueError(f"Tool '{tool_name}' not found.")
@@ -277,7 +281,9 @@ async def websocket_mcp_endpoint(websocket: WebSocket):
                     tool_function = tool_map[tool_name]
                     result_content = tool_function(**tool_call.arguments)
                     
-                    tool_result = mcp_schemas.ToolResult(content=result_content)
+                    # Convert result to text part format
+                    text_part = mcp_schemas.TextPart(text=str(result_content))
+                    tool_result = mcp_schemas.ToolResult(content=[text_part])
                     response = mcp_schemas.JsonRpcResponse(id=request_id, result=tool_result)
                     await mcp_manager.send_personal_message(response.model_dump_json(), websocket)
                     await ui_manager.broadcast(f"MCP Success: {tool_name} executed.")

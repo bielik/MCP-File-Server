@@ -49,20 +49,20 @@ class McpHelloParams(BaseModel):
     version: str
     capabilities: Dict[str, Any] = {}
 
-class ToolParameter(BaseModel):
-    name: str
-    type: Literal["string", "number", "boolean", "object", "array"]
-    description: str
-    required: bool = True
+class TextPart(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
 
 class ToolDefinition(BaseModel):
-    tool_name: str = Field(..., alias="toolName")
+    name: str
     description: str
-    parameters: List[ToolParameter] = []
+    input_schema: Dict[str, Any] = Field(..., alias="inputSchema")
+    
+    model_config = {"populate_by_name": True}
 
 class ToolCallParams(BaseModel):
-    tool_name: str = Field(..., alias="toolName")
+    name: str
     arguments: Dict[str, Any] = {}
 
 class ToolResult(BaseModel):
-    content: str | List[Dict[str, Any]] | Dict[str, Any]
+    content: List[TextPart]
