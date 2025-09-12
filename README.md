@@ -12,8 +12,8 @@ docker-compose up
 # Access the services
 # Frontend UI: http://localhost:5173
 # Backend API: http://localhost:8000  
-# MCP WebSocket: ws://localhost:8000/ws/mcp
-# MCP HTTP: http://localhost:8000/mcp
+# MCP HTTP: http://localhost:8000/mcp (for AI clients like Claude)
+# MCP WebSocket: ws://localhost:8000/ws/mcp (internal/debug use only)
 ```
 
 ---
@@ -22,7 +22,7 @@ docker-compose up
 
 ### 1.1. Purpose
 
-This project is a **production-ready Model Context Protocol (MCP) server** that enables AI agents to safely interact with your local file system. It provides both WebSocket and HTTP endpoints for maximum compatibility, along with a web-based management interface for real-time monitoring and permission control.
+This project is a **production-ready Model Context Protocol (MCP) server** that enables AI agents to safely interact with your local file system. It provides HTTP endpoints for AI client connections and WebSocket for internal communication, along with a web-based management interface for real-time monitoring and permission control.
 
 ### 1.2. Current Status - ✅ Core Implementation Complete
 
@@ -75,12 +75,14 @@ This is like a **permanent restaurant** where all customers (browser users and A
    User's Local Machine
 +--------------------------------------------------------------------+
 |                                                                    |
-|  ┌──────────┐   Browser    ┌──────────┐      MCP      ┌───────────┐ |
-|  │   You    ├─────────────>│ Frontend │   (WebSocket) │ AI Client │ |
-|  └──────────┘              │   UI     │<──────────────┤ (Claude)  │ |
-|                             └─────┬────┘               └─────┬─────┘ |
-|                                   │(HTTP)                    │       |
-|  +--------------------------------▼----------------------▼-------+ |
+|  ┌──────────┐   Browser    ┌──────────┐                ┌───────────┐ |
+|  │   You    ├─────────────>│ Frontend │                │ AI Client │ |
+|  └──────────┘              │   UI     │                │ (Claude)  │ |
+|                             └─────┬────┘                └─────┬─────┘ |
+|                                   │(HTTP)                     │       |
+|                                   │                           │(HTTP) |
+|                                   │                     MCP   │       |
+|  +--------------------------------▼-----------------------▼-------+ |
 |  | Docker Environment (docker-compose up)                       | |
 |  |                                                              | |
 |  |  ┌────────────────────────────────────────────────────────┐  | |
@@ -88,7 +90,7 @@ This is like a **permanent restaurant** where all customers (browser users and A
 |  |  │                                                        │  | |
 |  |  │  ✅ HTTP REST API        (/api/*)                     │  | |
 |  |  │  ✅ WebSocket UI         (/ws/ui)                     │  | |
-|  |  │  ✅ WebSocket MCP        (/ws/mcp)                    │  | |
+|  |  │  ✅ WebSocket MCP        (/ws/mcp) - internal only    │  | |
 |  |  │  ✅ HTTP MCP Endpoint    (/mcp)                       │  | |
 |  |  │  ✅ File System Tools    (read, write, list)          │  | |
 |  |  │  ✅ Permission System    (allowlist security)         │  | |
@@ -287,7 +289,7 @@ echo "Sample document" > shared-fs/docs/sample.txt
 ### 7.1. WebSocket Connection Test
 
 ```bash
-# Test WebSocket MCP endpoint
+# Test WebSocket MCP endpoint (for debugging/internal use only)
 wscat -c ws://localhost:8000/ws/mcp
 
 # Send initialization request
@@ -300,10 +302,12 @@ wscat -c ws://localhost:8000/ws/mcp
 {"jsonrpc": "2.0", "method": "tools/call", "params": {"toolName": "read_file", "arguments": {"path": "docs/sample.txt"}}, "id": 3}
 ```
 
-### 7.2. HTTP MCP Endpoint Test
+### 7.2. HTTP MCP Endpoint Test (⚠️ USE THIS FOR AI CLIENTS)
+
+> **IMPORTANT**: AI clients like Claude Code must use the HTTP endpoint, NOT WebSocket!
 
 ```bash
-# Test HTTP MCP endpoint
+# Test HTTP MCP endpoint (the one AI clients should use)
 curl -X POST http://localhost:8000/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
@@ -334,7 +338,169 @@ curl -X POST http://localhost:8000/mcp \
 
 ---
 
-## 8. Technology Stack
+## 8. AI Client Setup Guide
+
+### 8.1. ⚠️ CRITICAL: HTTP vs WebSocket Endpoints
+
+**IMPORTANT:** AI clients (like Claude Code) should connect to the **HTTP endpoint**, not the WebSocket endpoint.
+
+```
+✅ CORRECT for AI clients:   http://127.0.0.1:8000/mcp
+❌ WRONG for AI clients:     ws://127.0.0.1:8000/ws/mcp
+```
+
+**Why this matters:**
+- The WebSocket endpoint (`/ws/mcp`) is for direct protocol testing and development
+- AI clients like Claude Code expect HTTP-based MCP servers by default
+- Using the wrong endpoint will result in connection failures
+
+### 8.2. Claude Code Configuration
+
+#### Setting up Claude Code MCP Connection
+
+**Step 1: Locate your Claude Code configuration**
+- Global config: `%USERPROFILE%\.claude\settings.json`
+- Local config: `.claude\settings.json` (in your project)
+
+**Step 2: Add MCP server configuration**
+
+Add this configuration to your `.claude\settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "my-local-server": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp",
+      "description": "Local MCP KnowledgeExplorer server for file operations"
+    }
+  }
+}
+```
+
+**Step 3: Restart Claude Code**
+After adding the configuration, restart Claude Code for the changes to take effect.
+
+#### PowerShell Commands for MCP Management
+
+```powershell
+# Add MCP server to Claude Code (Global scope)
+claude mcp add my-local-server http://127.0.0.1:8000/mcp --global
+
+# Add MCP server to current project (Local scope)  
+claude mcp add my-local-server http://127.0.0.1:8000/mcp --local
+
+# List configured MCP servers
+claude mcp list
+
+# Remove MCP server
+claude mcp remove my-local-server
+
+# Test MCP server connection
+claude mcp test my-local-server
+```
+
+### 8.3. Configuration Verification
+
+#### Check if your MCP server is recognized:
+
+1. **In Claude Code interface:**
+   - Look for the MCP server indicator in the status bar
+   - Check the "Available Tools" section for file system tools
+
+2. **Test connection manually:**
+   ```powershell
+   # Test HTTP endpoint directly
+   curl -X POST http://127.0.0.1:8000/mcp -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+   ```
+
+3. **Check server logs:**
+   ```bash
+   docker-compose logs -f backend
+   ```
+
+### 8.4. Troubleshooting Common Issues
+
+#### Problem: "Connection Failed" or "Server Not Found"
+
+**Solutions:**
+1. **Verify server is running:**
+   ```bash
+   docker-compose ps
+   # Should show both backend and frontend containers running
+   ```
+
+2. **Check correct endpoint:**
+   - ✅ Use: `http://127.0.0.1:8000/mcp`
+   - ❌ Not: `ws://127.0.0.1:8000/ws/mcp`
+   - ❌ Not: `http://localhost:8000/mcp` (some AI clients prefer 127.0.0.1)
+
+3. **Test basic connectivity:**
+   ```bash
+   curl http://127.0.0.1:8000/
+   # Should return: {"message": "MCP KnowledgeExplorer Server"}
+   ```
+
+#### Problem: "Tools Not Available" or Empty Tool List
+
+**Solutions:**
+1. **Check server logs for errors:**
+   ```bash
+   docker-compose logs backend | grep ERROR
+   ```
+
+2. **Verify shared filesystem exists:**
+   ```bash
+   ls -la shared-fs/
+   mkdir -p shared-fs/docs shared-fs/projects shared-fs/output
+   ```
+
+3. **Test tool list manually:**
+   ```bash
+   curl -X POST http://127.0.0.1:8000/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+   ```
+
+#### Problem: "Permission Denied" Errors
+
+**Solutions:**
+1. **Check file path format:**
+   - ✅ Use relative paths: `docs/sample.txt`
+   - ❌ Not absolute paths: `/home/user/docs/sample.txt`
+
+2. **Verify allowlist permissions:**
+   Currently hardcoded in `backend/app/services/permission_service.py`:
+   ```python
+   PERMISSIONS = {
+       "context": ["docs", "projects"],    # Read-only
+       "working": ["projects", "output"],  # Read-write
+   }
+   ```
+
+3. **Check file exists in allowed directories:**
+   ```bash
+   ls shared-fs/docs/
+   ls shared-fs/projects/
+   ```
+
+### 8.5. Local vs Global Configuration
+
+#### Global Configuration
+- **Location:** `%USERPROFILE%\.claude\settings.json`
+- **Scope:** Available to all Claude Code projects
+- **Use case:** Personal development setup
+
+#### Local Configuration  
+- **Location:** `.claude\settings.json` (in project root)
+- **Scope:** Only for current project
+- **Use case:** Project-specific MCP servers, team sharing
+
+**Best Practice:** Start with local configuration for testing, then move to global for regular use.
+
+---
+
+## 9. Technology Stack
 
 | Category | Technology | Purpose | Status |
 |----------|------------|---------|---------|
@@ -349,7 +515,7 @@ curl -X POST http://localhost:8000/mcp \
 
 ---
 
-## 9. Project Structure
+## 10. Project Structure
 
 ```
 MCPFileServer/
@@ -383,9 +549,9 @@ MCPFileServer/
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
-### 10.1. Environment Variables
+### 11.1. Environment Variables
 
 ```bash
 # .env file configuration
@@ -395,7 +561,7 @@ DATABASE_PATH=./data        # SQLite database directory
 SHARED_FS_PATH=./shared-fs  # File system mount point
 ```
 
-### 10.2. Permission Configuration
+### 11.2. Permission Configuration
 
 Currently hardcoded in `backend/app/services/permission_service.py`:
 
@@ -410,9 +576,9 @@ PERMISSIONS = {
 
 ---
 
-## 11. Monitoring and Debugging
+## 12. Monitoring and Debugging
 
-### 11.1. Real-time Activity Monitoring ✅
+### 12.1. Real-time Activity Monitoring ✅
 
 The web UI at `http://localhost:5173` displays live MCP activity:
 - Tool calls and results
@@ -420,7 +586,7 @@ The web UI at `http://localhost:5173` displays live MCP activity:
 - Error messages and stack traces
 - Client connections and disconnections
 
-### 11.2. Log Access
+### 12.2. Log Access
 
 ```bash
 # View all container logs
@@ -433,7 +599,7 @@ docker-compose logs -f backend
 docker-compose logs frontend
 ```
 
-### 11.3. Database Inspection
+### 12.3. Database Inspection
 
 ```bash
 # Access SQLite database directly
@@ -448,7 +614,7 @@ SELECT * FROM settings;
 
 ---
 
-## 12. Roadmap
+## 13. Roadmap
 
 ### ✅ Phase 1: Core MCP Implementation (COMPLETE)
 - [x] MCP JSON-RPC 2.0 protocol
@@ -480,9 +646,9 @@ SELECT * FROM settings;
 
 ---
 
-## 13. Contributing
+## 14. Contributing
 
-### 13.1. Development Setup
+### 14.1. Development Setup
 
 ```bash
 # Install development dependencies
@@ -498,7 +664,7 @@ docker-compose exec backend black app/
 docker-compose exec frontend npm run format
 ```
 
-### 13.2. Code Quality Standards
+### 14.2. Code Quality Standards
 
 - **Python**: PEP 8, type hints, comprehensive docstrings
 - **TypeScript**: Strict mode, explicit types, JSDoc comments  
@@ -507,22 +673,22 @@ docker-compose exec frontend npm run format
 
 ---
 
-## 14. Support and Documentation
+## 15. Support and Documentation
 
-### 14.1. Additional Documentation
+### 15.1. Additional Documentation
 
 - **[CLAUDE.md](./CLAUDE.md)** - Comprehensive project context for AI development
 - **[changelog.md](./changelog.md)** - Detailed version history and changes
 - **[plan.md](./plan.md)** - Development roadmap and task breakdown
 - **[context-strategy.md](./context-strategy.md)** - Documentation strategy
 
-### 14.2. API Documentation
+### 15.2. API Documentation
 
 - **Interactive API Docs**: http://localhost:8000/docs (when running)
 - **OpenAPI Schema**: http://localhost:8000/openapi.json
 - **WebSocket Test Interface**: Built-in FastAPI WebSocket testing
 
-### 14.3. Getting Help
+### 15.3. Getting Help
 
 - **Issues**: Check existing issues and create new ones for bugs/features
 - **Discussions**: Use GitHub Discussions for questions and ideas  
@@ -533,4 +699,4 @@ docker-compose exec frontend npm run format
 
 **🚀 The MCP KnowledgeExplorer is ready for AI agent integration!**
 
-Connect your AI clients to `ws://localhost:8000/ws/mcp` or `http://localhost:8000/mcp` and start exploring your file system safely and efficiently.
+Connect your AI clients to `http://127.0.0.1:8000/mcp` and start exploring your file system safely and efficiently.
