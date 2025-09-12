@@ -165,7 +165,7 @@ Production-ready Docker environment with development optimization.
 ### 4.1. Protocol Compliance
 
 **✅ Specification**: MCP 2024-11-05  
-**✅ Transport**: WebSocket + HTTP support  
+**✅ Transport**: HTTP (for AI clients), WebSocket (internal)  
 **✅ Format**: JSON-RPC 2.0 compliant
 
 ### 4.2. Supported Methods
