@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **📚 Comprehensive AI Client Setup Documentation** (`README.md` Section 8)
+  - Complete Claude Code MCP configuration guide
+  - Step-by-step .claude.json setup instructions
+  - PowerShell commands for MCP server management
+  - **⚠️ CRITICAL HTTP vs WebSocket endpoint clarification** to prevent connection failures
+  - Detailed troubleshooting guide for common connection issues
+  - Local vs Global configuration scope explanation
+  - Configuration verification steps and debugging commands
+
+### Changed
+- **🔄 Enhanced Documentation Structure** (`README.md`)
+  - Repositioned and expanded AI client setup instructions
+  - Added prominent warnings about HTTP vs WebSocket endpoint confusion
+  - Improved quick start section with endpoint clarity
+  - Enhanced troubleshooting section with specific error scenarios
+
+### Documentation Improvements
+- **🎯 Addressed Critical Client Setup Gap**: Previously missing AI client connection instructions
+- **🚨 Fixed HTTP/WebSocket Confusion**: Clear warnings preventing common connection failures
+- **🛠️ Added Practical Commands**: PowerShell and curl examples for client management
+- **🔍 Enhanced Debugging Support**: Comprehensive troubleshooting for connection issues
+
 ## [1.0.0] - 2025-01-12
 
 ### 🎉 MAJOR MILESTONE: Full MCP Protocol Implementation Complete

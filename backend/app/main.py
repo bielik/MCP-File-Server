@@ -93,7 +93,9 @@ async def process_mcp_request(request_data: dict) -> dict:
 
         elif method == "tools/list":
             tools = mcp_service.get_tools()
-            return {"jsonrpc": "2.0", "id": request_id, "result": tools}
+            # Convert ToolDefinition objects to dictionaries with proper field names
+            tools_dict = [tool.model_dump(by_alias=True) for tool in tools]
+            return {"jsonrpc": "2.0", "id": request_id, "result": tools_dict}
 
         elif method == "tools/call":
             tool_call = mcp_schemas.ToolCallParams(**params)
