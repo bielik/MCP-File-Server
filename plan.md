@@ -1,139 +1,89 @@
+<./plan.md>
 # Development Plan - MCP KnowledgeExplorer
 
 ## Current Project Status
-**Phase:** Core MCP Protocol Implementation  
-**Status:** ✅ MCP Protocol Layer and Core File System Tools Implemented  
-**Next Phase:** Frontend Component Development
+**Phase:** Phase 1 Complete - Frontend Fundamentals & Read-Only Visualization
+**Status:** ✅ Modern File Explorer UI with Visual Permission Indicators Implemented
+**Next Phase:** Phase 2: Config-File Driven Permissions & Performance
 
 ---
 
-## Immediate Priorities (Sprint 1)
+### Completed Milestones
 
-### 1. MCP Protocol Implementation ⚡ HIGH PRIORITY
-- **Location:** `backend/app/api/websockets.py`
-- **Scope:** Replace stub MCP handler with full protocol implementation
-- **Status:** ✅ **DONE**
-- **Requirements:**
-  - [cite_start]Parse incoming MCP JSON-RPC messages [cite: 165]
-  - Implement `tools/list` endpoint (list available tools)
-  - Implement `tools/call` endpoint (execute file system operations)
-  - Handle protocol errors and validation
-  - Add proper logging for debugging
-- **Acceptance Criteria:**
-  - AI agents can connect and list available tools
-  - File operations work through MCP protocol
-  - Error handling provides clear feedback
-  - All communication follows MCP specification
+#### ✅ Backend Core Complete (Previously Sprint 1)
+* **✅ MCP Protocol Implementation:** Replaced stub MCP handler with full, compliant JSON-RPC 2.0 implementation.
+* **✅ Core File System Tools:** Implemented essential file operations (`read_file`, `list_files`, `write_file`) with integrated security.
+* **✅ Initial Permission System:** Implemented the initial hardcoded, allowlist-based file access control in `permission_service.py`.
 
-### 2. Core File System Tools 🔧 HIGH PRIORITY
-- **Location:** `backend/app/services/` (new file_service.py)
-- **Scope:** Implement essential file operations with permission checking
-- **Status:** ✅ **DONE**
-- **Tools to implement:**
-  - `read_file` - Read file contents with path validation
-  - `list_files` - List directory contents with filtering
-  - `write_file` - Write content to files (with permission checks)
-  - `create_directory` - Create new directories
-  - `file_info` - Get file metadata (size, modified date, etc.)
-- **Requirements:**
-  - All operations must validate against allowlist permissions
-  - Proper error handling for file system errors
-  - Logging for all operations (for UI activity feed)
-  - Path normalization to prevent directory traversal
-
-### 3. Permission Management System 🔐 MEDIUM PRIORITY
-- **Location:** `backend/app/services/permission_service.py`
-- **Scope:** Implement allowlist-based file access control
-- **Status:** ✅ **DONE** (Initial version for backend logic)
-- **Components:**
-  - Permission levels: Context (read), Working (read-write), Output (agent-controlled)
-  - Path validation and normalization
-  - Database storage for permission settings
-  - API endpoints for permission management
-- **Database Schema:** Add permissions table to store allowed paths and their levels
+#### ✅ Phase 1 Complete: Frontend Fundamentals & Read-Only Visualization
+* **✅ Secure Browse API:** Implemented `/api/browse` endpoint with pagination, security hardening, and directory traversal prevention.
+* **✅ Permission Display API:** Implemented `/api/current-permissions` endpoint to expose hardcoded permissions to UI.
+* **✅ Advanced File Explorer:** Built React component with tree navigation, breadcrumbs, pagination, and folder navigation.
+* **✅ Visual Permission System:** Implemented permission indicators with color-coded badges (Read-Only/Read-Write/No Access).
+* **✅ Enhanced UI Architecture:** Created tabbed interface with File Explorer and Server Status views.
+* **✅ Pagination System:** Full pagination with page numbers, item counts, and navigation controls.
+* **✅ Permission Legend:** Added sidebar with permission level explanations and recent activity feed.
 
 ---
 
-## Frontend Development (Sprint 2)
+### Active Development Plan: Dynamic Workspaces & Permissions
 
-### 4. File Explorer Component 📁 HIGH PRIORITY
-- **Location:** `frontend/src/components/FileExplorer.tsx`
-- **Features:**
-  - Breadcrumb navigation with direct path editing
-  - Tree view of file system
-  - Multi-select with checkboxes
-  - Context menu for file operations
-  - Keyboard navigation support
-- **State Management:** Use Zustand store for file explorer state
+The following incremental plan is based on the detailed **[Feature Spec: Dynamic Workspace & Permission Management (v3.0)](./specs/feature-dynamic-workspaces.md)**. This plan supersedes the original Sprint 2 and 3 structure in favor of a more robust, phased rollout.
 
-### 5. Permission Management UI 🎛️ MEDIUM PRIORITY
-- **Location:** `frontend/src/components/PermissionPanel.tsx`
-- **Features:**
-  - Assign permission levels to selected files/folders
-  - Visual indicators for current permission levels
-  - Bulk permission operations
-  - Permission inheritance settings
+#### ✅ Phase 1: Frontend Fundamentals & Read-Only Visualization (COMPLETED)
+*Goal: Build the foundational UI components to visualize the existing permission system, providing immediate user value and a solid base for future work.*
 
-### 6. Activity Log Component 📊 MEDIUM PRIORITY
-- **Location:** `frontend/src/components/ActivityLog.tsx`
-- **Features:**
-  - Real-time display of MCP operations
-  - Filtering and search capabilities
-  - Export activity to file
-  - Auto-scroll to latest activity
+* **✅ Completed Deliverables:**
+    * ✅ A hardened, secure, UI-only API endpoint (`GET /api/browse`) for listing raw file system contents with pagination.
+    * ✅ A comprehensive File Explorer component with tree navigation, breadcrumbs, and folder navigation.
+    * ✅ Visual permission indicators that display the current, hardcoded permission status with color-coded badges.
+    * ✅ Enhanced tabbed UI with File Explorer and Server Status views.
+    * ✅ Permission legend and real-time activity sidebar for better user experience.
 
----
+#### Phase 2: Config-File Driven Permissions & Performance (Est. 1-2 Weeks)
+*Goal: Decouple permissions from the code by moving them to a configuration file. Implement formalized logic and performance caching.*
 
-## Infrastructure and Polish (Sprint 3)
+* **Key Deliverables:**
+    * Backend logic refactored to use a `permissions.json` file instead of hardcoded rules.
+    * Implementation of the formalized permission precedence logic and a comprehensive test suite.
+    * An in-memory Trie-based cache to ensure high-performance permission checks.
+    * A simple settings page in the UI for editing the `permissions.json` file.
 
-### 7. Database Schema and Migrations 💾 MEDIUM PRIORITY
-- **Location:** `backend/app/models/`
-- **Scope:** Complete database schema for all application data
-- **Tables needed:**
-  - permissions (path, level, created_at)
-  - activity_logs (timestamp, client_id, operation, result)
-  - settings (key-value configuration storage)
+#### Phase 3A: Backend Migration to Database (Est. 1-2 Weeks)
+*Goal: Migrate the permission system to a full database model, building the necessary APIs for the advanced UI.*
 
-### 8. Configuration Management ⚙️ LOW PRIORITY
-- **Location:** `backend/app/api/endpoints.py`
-- **Features:**
-  - Server configuration API endpoints
-  - Port and path configuration
-  - Export/import settings
-  - Default permission templates
+* **Key Deliverables:**
+    * `Workspace` and `Permission` SQLAlchemy models.
+    * A full suite of backend APIs for managing workspaces and their rules.
+    * A batch-capable `POST /api/.../effective-permissions:batch` endpoint to power the UI.
+    * A one-shot script to migrate permissions from the JSON file to the database.
 
-### 9. Error Handling and Validation 🛡️ HIGH PRIORITY
-- **Scope:** Application-wide error handling strategy
-- **Status:** ✅ **DONE** (for MCP endpoint)
-- **Components:**
-  - Custom exception classes
-  - Consistent error response format
-  - Frontend error boundaries
-  - User-friendly error messages
+#### Phase 3B: Advanced UI & Full Workspace Experience (Est. 1-2 Weeks)
+*Goal: Build the final, advanced user interface for complete and intuitive workspace management.*
+
+* **Key Deliverables:**
+    * A UI for creating, deleting, and activating workspaces.
+    * The full two-panel permission editor for assigning `allow`/`deny` rules.
+    * An "Inspect Permission" feature (e.g., a tooltip) that explains *why* a file has its current status by showing the matched rule.
 
 ---
 
 ## Future Enhancements (Backlog)
 
 ### Advanced Features
-- **Keyword Search Service:** Full-text search across allowed files
-- **Semantic Search:** Vector embeddings with Qdrant integration
-- **Multi-client Management:** Handle multiple simultaneous AI clients
-- **Plugin System:** Extensible tool architecture
-- **Backup and Sync:** File system change detection and sync
+- **Keyword Search Service:** Full-text search across allowed files.
+- **Semantic Search:** Vector embeddings with Qdrant integration.
+- **Multi-client Management:** Handle multiple simultaneous AI clients.
+- **Plugin System:** Extensible tool architecture.
 
 ### UI/UX Improvements
-- **Shadcn/ui Integration:** Professional component library
-- **Dark/Light Theme:** Theme switching capability
-- **Responsive Design:** Mobile-friendly interface
-- **Keyboard Shortcuts:** Power user productivity features
-- **Drag and Drop:** File operations via drag and drop
+- **Shadcn/ui Integration:** Professional component library.
+- **Dark/Light Theme:** Theme switching capability.
+- **Drag and Drop:** File operations via drag and drop in the UI.
 
 ### Advanced Security
-- **Client Authentication:** API key management for AI clients
-- **Audit Trail:** Comprehensive operation logging
-- **Sandboxing:** Additional file system isolation
-- **Rate Limiting:** Prevent abuse from AI clients
+- **Client Authentication:** API key management for AI clients.
+- **Audit Trail:** Comprehensive operation logging.
 
 ---
 
@@ -142,52 +92,31 @@
 Each task is considered complete when:
 
 ### Backend Tasks
-- [x] Code follows FastAPI best practices
-- [x] Comprehensive error handling implemented
-- [ ] Unit tests written and passing
-- [ ] Integration tests for WebSocket communication
-- [x] Logging added for debugging
-- [x] Documentation updated in CLAUDE.md
-- [ ] No breaking changes to existing API
+- [x] Code follows FastAPI best practices.
+- [x] Comprehensive error handling implemented.
+- [ ] **Permission logic passes the full parametric test matrix with all edge cases covered.**
+- [ ] Unit and integration tests are written and passing for all new logic.
+- [x] Logging is added for debugging and auditing.
+- [x] Documentation (`CLAUDE.md`, specs) is updated.
 
 ### Frontend Tasks
-- [ ] Component follows React best practices
-- [ ] TypeScript types properly defined
-- [ ] Responsive design implemented
-- [ ] Accessibility features included
-- [ ] State management properly integrated
-- [ ] Error states handled gracefully
-- [ ] Loading states implemented
-
-### Full Feature Tasks
-- [ ] Both frontend and backend components complete
-- [ ] End-to-end functionality tested
-- [ ] Real-time updates working via WebSocket
-- [ ] Permission system integration verified
-- [ ] User workflow tested and documented
+- [ ] Component follows React best practices with TypeScript.
+- [ ] State management is properly integrated.
+- [ ] Error and loading states are handled gracefully.
+- [ ] **All new public-facing API endpoints are hardened (path traversal, rate-limiting, auth).**
+- [ ] The user workflow is tested and documented.
 
 ---
 
 ## Development Guidelines
 
 ### Code Quality Standards
-- **Python:** Follow PEP 8, use type hints, comprehensive docstrings
-- **TypeScript:** Strict mode enabled, explicit types, JSDoc comments
-- **Testing:** Minimum 80% code coverage for new features
-- **Documentation:** Update CLAUDE.md and change.log with every significant change
+- **Python:** Follow PEP 8, use type hints, comprehensive docstrings.
+- **TypeScript:** Strict mode enabled, explicit types, JSDoc comments.
+- **Testing:** New logic requires comprehensive unit tests. New features require end-to-end integration tests.
+- **Documentation:** Update relevant spec files and `CLAUDE.md` with every significant change.
 
 ### Git Workflow
-- Feature branches for each task
-- Clear commit messages following conventional commits
-- Pull request reviews for major changes
-- Squash commits before merging
-
-### Environment Management
-- All development happens within Docker containers
-- Environment variables managed through .env file
-- Dependencies pinned to specific versions
-- Database migrations handled through SQLAlchemy
-
----
-
-*This plan should be reviewed and updated regularly as the project evolves. Completed items should be moved to the change.log with details about implementation decisions and any lessons learned.*
+- Feature branches for each task, aligned with the phased plan.
+- Clear commit messages following conventional commits.
+- Pull request reviews for all changes.

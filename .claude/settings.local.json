@@ -45,7 +45,9 @@
       "Bash(findstr:*)",
       "Bash(start http://localhost:3007)",
       "Bash(cat:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "mcp__wisdom__list_files",
+      "mcp__wisdom__read_file"
     ],
     "deny": [],
     "ask": []

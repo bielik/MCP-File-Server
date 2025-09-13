@@ -1,186 +1,177 @@
-# **Implementation Plan: Dynamic Workspace & Permission Management**
+# Feature Spec: Dynamic Workspace & Permission Management (v3.0 - Final Implementation Blueprint)
 
-**Document Version:** 1.0
+**Document Version:** 3.1
 **Date:** 2025-09-13
-**Author:** Architect (G)
-
-### 1. Executive Summary & Goals
-
-This document outlines the plan to replace the current static, hardcoded file permission system with a dynamic, database-driven model centered around the concept of **Workspaces**.
-
-**Primary Goals:**
-* **Enhance Flexibility:** Allow users to define multiple, distinct contexts ("Workspaces") for an AI client, each with its own granular set of file permissions.
-* **Improve User Experience:** Enable users to configure all permissions through the web UI, removing the need to edit backend code or configuration files.
-* **Strengthen Security:** Implement a robust "default-deny" security model where access is only granted through explicit rules, including the ability to define exceptions.
-* **Future-Proof the Architecture:** Create a scalable permission system that can be easily extended to support future tools like keyword or semantic search.
-
-### 2. Architectural Design
-
-The new architecture decouples the physical file system from the virtual view presented to the AI client using three core concepts:
-
-1.  **Root Paths**: Top-level host directories (e.g., `C:\Users\...\Documents`) mounted into a common `/source` directory inside the container. These are the raw materials for Workspaces but are never directly exposed.
-2.  **Workspaces**: A named session (e.g., "Project X Research," "Tax Preparation") that represents a specific configuration of permissions. Only one Workspace can be active at a time, defining the AI's current context.
-3.  **Permissions**: Database records that link a Workspace to specific file paths. Each rule defines a `path`, a `permission_type` (`read`, `write`), and a `rule_type` (`allow`, `deny`).
-
-
-
-The core security principle is that the **most specific permission rule always wins**. This allows a `deny` rule on a specific file to override an `allow` rule on its parent folder.
-
-### 3. Key User Workflows
-
-**Workflow A (AI Client): Initial File System Discovery**
-1.  **Initiator:** AI Client.
-2.  **Action:** The client, having no prior knowledge of the file structure, calls the `list_files` tool with an empty `path` parameter (`"path": ""`).
-3.  **Server Process:**
-    * The backend identifies the empty path request as a special case for root discovery.
-    * It queries the database for all `allow` rules in the currently active Workspace.
-    * It extracts the unique, top-level directories from these rules (e.g., `documents`, `archive`).
-4.  **Outcome:** The client receives a list containing only the top-level virtual directories it has access to, providing a starting point for navigation.
-
-**Workflow B (AI Client): Secure Directory Listing**
-1.  **Initiator:** AI Client.
-2.  **Context:** The active Workspace grants `read` access to `documents/project-alpha` but has an explicit `deny` rule on `documents/project-alpha/budget.xlsx`.
-3.  **Action:** The client calls `list_files` with `"path": "documents/project-alpha"`.
-4.  **Server Process:**
-    * The backend verifies the client can read the requested directory.
-    * It performs a raw listing of the corresponding physical directory (`/source/documents/project-alpha`).
-    * It iterates through each item in the raw list, checking its permissions individually.
-    * The `budget.xlsx` file is skipped because its specific `deny` rule overrides the parent folder's `allow` rule.
-5.  **Outcome:** The client receives a filtered list of contents, completely unaware that `budget.xlsx` exists.
-
-**Workflow C (UI User): Workspace Configuration**
-1.  **Initiator:** UI User.
-2.  **Action:** The user wants to grant the AI `write` access to the `documents/project-beta` directory.
-3.  **UI Process:**
-    * The user selects the "Project Beta" Workspace from a dropdown, making it active.
-    * The UI displays a two-panel view:
-        * **Left Panel (Source Browser):** Shows the complete, un-permissioned contents of the `/source` mount, fetched via the new `/api/browse` endpoint.
-        * **Right Panel (Workspace Permissions):** Shows the files and folders that currently have rules in this Workspace.
-    * The user navigates to `documents/` in the left panel, selects the `project-beta` folder, and adds it to the right panel, selecting `'write'` permission from a dialog.
-    * The UI sends a `POST` request to `/api/workspaces/{id}/permissions` to save the new `allow write` rule.
-4.  **Outcome:** The permission is saved to the database. The next time the AI client accesses its tools, it will have write access to the `documents/project-beta` directory.
-
-### 4. Phased Implementation Plan
+**Status:** Phase 1 Complete - Phase 2 Ready for Implementation
 
 ---
 
-#### **Phase 1: Backend Foundation & Data Model**
-*Goal: Establish the database schema and API endpoints required to manage workspaces and permissions.*
+### 1. Why?: The Problem & Goals
 
-**Step 1.1: Database Schema Creation**
-* **Tasks:**
-    1.  Create `Workspace` and `Permission` SQLAlchemy models in a new `backend/app/models/workspace.py` file.
-    2.  Update `backend/app/main.py`'s `on_startup` event to create these new tables.
-* **Unit Tests:**
-    * Verify that `Workspace` and `Permission` model instances can be created correctly.
-    * Test the foreign key relationship between the models.
+The current static, hardcoded permission system is a significant bottleneck, limiting the application's flexibility and requiring developer intervention for changes. This feature introduces a dynamic, UI-driven system to solve these limitations.
 
-**Step 1.2: Configuration & Mounting Update**
-* **Tasks:**
-    1.  Update project documentation (`README.md`) to specify the new `ROOT_PATH_X` format for the `.env` file.
-    2.  Update `docker-compose.yml` to mount the specified host paths into the `/source` directory in the backend container.
-* **Tests:**
-    * Manual verification: `docker-compose exec backend ls /source` should show the mounted directories.
+**Goals:**
+* **Decouple Permissions from Code:** Enable real-time permission management via the UI.
+* **Introduce Multi-Context Sessions ("Workspaces"):** Allow users to tailor the AI's environment for specific, concurrent tasks.
+* **Provide Granular, Auditable Control:** Implement a robust `allow`/`deny` system with clear precedence rules and audit trails.
 
-**Step 1.3: CRUD APIs for Workspaces & Permissions**
-* **Tasks:**
-    1.  Create `schemas` and `crud` functions for `Workspace` and `Permission`.
-    2.  Implement a new API router in `backend/app/api/endpoints/workspaces.py` with the following endpoints:
-        * `GET /api/workspaces`
-        * `POST /api/workspaces`
-        * `PUT /api/workspaces/{id}/activate`
-        * `GET /api/workspaces/{id}/permissions`
-        * `POST /api/workspaces/{id}/permissions`
-        * `DELETE /api/permissions/{id}`
-* **Unit Tests:**
-    * Write tests for each CRUD function, mocking database calls.
-* **Integration Tests:**
-    * Write API tests (using FastAPI's `TestClient`) that hit the actual endpoints to create a workspace, add a permission, and then delete them.
+### 2. What?: The User Experience
 
----
+This feature will introduce a "Workspaces" section in the UI, enabling users to manage the AI's file access context. Key features include a workspace switcher, a two-panel permission editor for granting `read`/`write` access and creating `deny` exceptions, and clear visual indicators for the permission status of all files. A crucial new UI feature will be the "Inspect Permission" tooltip, which explains exactly *why* a file has a certain status by showing the specific rule that was applied.
 
-#### **Phase 2: Core Logic Refactoring**
-*Goal: Replace all hardcoded permission logic with the new dynamic, database-driven system.*
+### 3. How?: Technical Implementation Plan
 
-**Step 2.1: Refactor `PermissionService`**
-* **Tasks:**
-    1.  Delete the hardcoded `PERMISSIONS` dictionary.
-    2.  Implement a function `get_active_workspace()` that queries the database.
-    3.  Rewrite `check_access(path, operation)` to:
-        * Fetch all permissions for the active workspace.
-        * Filter for rules applying to the given `path`.
-        * Implement the "most specific rule wins" logic to determine the final outcome (`allow` or `deny`).
-* **Unit Tests:**
-    * This is critical. Create a comprehensive test suite for `check_access` with mock database responses. Test scenarios:
-        * Simple allow.
-        * Simple deny.
-        * Parent `allow`, specific child `deny` (should deny child).
-        * Parent `deny`, specific child `allow` (should allow child).
-        * No matching rule (should deny).
-        * Permission check on the root directory.
+This plan adopts an incremental, three-phase rollout strategy, guided by feature flags, to manage complexity and risk. It incorporates extensive feedback on security, performance, and API design.
 
-**Step 2.2: Refactor `FileService`**
-* **Tasks:**
-    1.  Update `read_file`, `write_file`, and `list_files` to only use the refactored `permission_service.check_access`.
-    2.  In `list_files`, implement the special logic for an empty `path` to discover the root directories.
-    3.  In `list_files`, ensure the post-listing filtering loop is implemented correctly.
-* **Unit Tests:**
-    * Mock `permission_service` to verify that `file_service` functions call it correctly before any file system access.
-* **Integration Tests:**
-    * Set up a test workspace and permissions in the database.
-    * Call the `tools/call` MCP endpoint for `list_files` and assert that the returned list is correctly filtered based on the database rules.
+**Core Strategy: Feature Flags**
+Implementation will be wrapped in feature flags to allow for gradual rollout and safe rollbacks.
+```python
+# config.py
+FEATURE_FLAGS = {
+    "ENABLE_CONFIG_FILE_PERMISSIONS": False, # Activates Phase 2
+    "ENABLE_DATABASE_PERMISSIONS": False     # Activates Phase 3
+}
 
----
 
-#### **Phase 3: Frontend Implementation**
-*Goal: Build the UI components necessary for users to manage workspaces and permissions.*
+#### ✅ **Phase 1: Frontend Fundamentals & Read-Only Visualization** (COMPLETED)
 
-**Step 3.1: "Source Browser" API Endpoint**
-* **Tasks:**
-    1.  Create a new, UI-only endpoint: `GET /api/browse`.
-    2.  This endpoint lists the raw contents of `/source` and must include robust security to prevent directory traversal attacks (e.g., `?path=../`).
-* **Unit Tests:**
-    * Write tests specifically for the path traversal security checks.
+*Goal: Build foundational UI components and visualize the existing permission system without altering backend logic.*
 
-**Step 3.2: Workspace Management UI**
-* **Tasks:**
-    1.  Create a React component that fetches and displays the list of workspaces from `GET /api/workspaces`.
-    2.  Implement functionality to create new workspaces and to set a workspace as active via the API.
-* **Unit Tests:**
-    * Use React Testing Library to test component rendering and interactions with mock API calls.
+**✅ Backend Tasks Completed:**
 
-**Step 3.3: Two-Panel Permission Editor UI**
-* **Tasks:**
-    1.  Build the main two-panel layout. The left panel uses `/api/browse`, the right panel uses `/api/workspaces/{id}/permissions`.
-    2.  Implement the client-side helper function `getPermissionStatus(path)` that merges the file list with the rules list to determine the status for each item.
-    3.  Render status indicators (e.g., icons) next to each file/folder.
-    4.  Implement the user interactions (e.g., drag-and-drop, context menus) for adding/removing permissions.
-* **Unit Tests:**
-    * Write comprehensive tests for the `getPermissionStatus` helper function with various mock rule sets to ensure it correctly identifies the winning rule.
+1.  ✅ **Create Hardened Browser API:** Implemented `GET /api/browse` with pagination (`page`, `pageSize`), security hardening, and directory traversal prevention.
+2.  ✅ **Expose Current Permissions:** Implemented `GET /api/current-permissions` to return the hardcoded `PERMISSIONS` dictionary with descriptions.
 
-### 5. Appendix
+**✅ Frontend Tasks Completed:**
 
-#### A: Database Schema
+1.  ✅ **Build Advanced File Explorer:** Created comprehensive file explorer component with tree navigation, breadcrumbs, pagination, and folder navigation.
+2.  ✅ **Display Permission Indicators:** Implemented color-coded permission badges (Read-Only/Read-Write/No Access) with tooltips.
+3.  ✅ **Enhanced UI Architecture:** Built tabbed interface with File Explorer and Server Status views.
+4.  ✅ **Permission Legend:** Added sidebar with permission explanations and real-time activity feed.
+
+**✅ Testing Results:**
+
+  * ✅ **Unit Tests:** API endpoints pass security tests including directory traversal prevention.
+  * ✅ **Integration Tests:** Frontend correctly renders file tree, handles pagination, and displays accurate permission indicators.
+  * ✅ **User Experience Tests:** Navigation, pagination, and permission visualization work seamlessly.
+
+-----
+
+#### **Phase 2: Config-File Driven Permissions & Performance** (Est. 1-2 Weeks)
+
+*Goal: Decouple permissions from code, implement formalized logic and caching, and provide a simple UI for editing.*
+
+**Backend Tasks:**
+
+1.  **Write Test Matrix First:** Before implementation, create the full `pytest` matrix for the permission precedence logic.
+2.  **Externalize Permissions:** Move hardcoded rules to `config/permissions.json`.
+3.  **Implement Formal Precedence Logic & Caching:** Refactor `PermissionService` to read from the config file. Implement the formal precedence rules (Appendix B) and the in-memory Trie-based cache (Appendix C).
+4.  **Create Hardened Config Management API:** Implement `GET` and `PUT` endpoints for `/api/config/permissions`. The `PUT` endpoint MUST be hardened with ETag/If-Match for concurrency control and perform atomic writes (temp + fsync + rename).
+
+**Frontend Tasks:**
+
+1.  **Build Simple Permission Editor:** Create a settings page for editing the `permissions.json` file via the new, hardened API.
+
+**Testing Strategy:**
+
+  * **Unit Tests:** The `PermissionService` precedence logic must pass the full test matrix. Test cache invalidation and ETag concurrency control (one client succeeds, the other gets a 412 error).
+  * **Performance Benchmarks:** Establish and meet SLAs for permission resolution on ≥1k paths.
+
+-----
+
+#### **Phase 3A: Backend Migration to Database** (Est. 1-2 Weeks)
+
+*Goal: Migrate the entire permission system to a database backend, preparing for the full workspace UI.*
+
+**Backend Tasks:**
+
+1.  **Implement Data Model:** Create `Workspace` and `Permission` SQLAlchemy models with all specified constraints (Appendix D).
+2.  **Build Core APIs:** Implement all Workspace and Permission CRUD APIs.
+3.  **Implement Batch `effective-permissions` API:** Build `POST /api/workspaces/{id}/effective-permissions:batch`. This is the cornerstone for the new UI. It will return the status and the `matchedRule` for each path in the request.
+4.  **Refactor `PermissionService`:** Switch the data source to the database. The core caching and precedence logic will be reused.
+5.  **Implement Audit Logging:** Enhance `PermissionService` to emit structured audit events for each permission decision.
+6.  **Create Migration Script:** Develop a one-shot, idempotent script to migrate rules from `permissions.json` to the database.
+
+**Testing Strategy:**
+
+  * **Unit Tests:** Test all new API endpoints, database constraints (e.g., duplicate rule rejection), and the migration script.
+  * **Integration Tests:** Verify the `:batch` endpoint returns correct statuses and `matchedRule` explanations for a complex set of rules.
+
+#### **Phase 3B: Advanced UI & Full Workspace Experience** (Est. 1-2 Weeks)
+
+*Goal: Build the final user-facing features for complete workspace and permission management.*
+
+**Frontend Tasks:**
+
+1.  **Build Workspace UI:** Create UI components for creating, deleting, and activating workspaces. Activation will trigger a UI refresh.
+2.  **Build Two-Panel Permission Editor:** Implement the full editor. The right panel will use the `:batch` endpoint to efficiently fetch permission statuses and display indicators.
+3.  **Implement "Inspect Permission" UI:** On hover or click of a permission indicator, a tooltip/modal will appear. It will use the `matchedRule` data returned from the `:batch` API to display a human-readable explanation of why a permission was granted or denied.
+
+**Testing Strategy:**
+
+  * **E2E Tests:** A full workflow test: create a workspace, add rules with the two-panel editor, activate it, and verify an AI client receives the correct filtered view. The "Inspect Permission" UI must show the correct explanation.
+
+-----
+
+### 4\. Migration & Deprecation Strategy
+
+  * **Phase 2 -\> 3 Migration:** The `permissions.json` to database migration will be handled by a one-time execution of the migration script during deployment.
+  * **/shared-fs Deprecation:** The `/shared-fs` mount will be maintained for backward compatibility. After Phase 3, it will be exposed as a virtual `legacy/` directory within the `/source` mount. The UI will display a prominent, non-blocking warning to users still relying on the old system, guiding them to migrate their configuration. The `legacy/` mount will be fully removed in a future major version release.
+
+-----
+
+### 5\. Appendix: Technical Specifications
+
+#### A: Path Normalization & Security
+
+All path inputs to the backend MUST undergo the following normalization and validation sequence:
+
+1.  Resolve `realpath` to handle symbolic links.
+2.  Verify the resolved path is a child of the `/source` base directory. Reject if it is not.
+3.  Apply Unicode normalization (NFC).
+4.  Collapse multiple slashes (e.g., `//`) into a single slash.
+5.  Strip any trailing slash.
+6.  Paths are treated case-sensitively internally.
+
+#### B: Permission Precedence Logic
+
+The logic for `check_access` is as follows:
+
+1.  **Specificity:** A rule on a child path is more specific than a rule on a parent path.
+2.  **Tie-Breaker:** For rules of equal specificity, **`deny` wins over `allow`**.
+3.  **Implied Permissions:** A `write` permission implicitly grants `read`.
+4.  **Default:** If no rule matches, access is **denied**.
+
+#### C: Caching Strategy
+
+The active workspace's permission rules will be loaded into an in-memory **Trie** data structure. This provides highly efficient prefix matching for resolving permissions. The cache is invalidated and rebuilt upon workspace activation or any change to the active workspace's rules.
+
+#### D: Database Schema
 
 **`workspaces` table:**
-* `id`: INTEGER, PRIMARY KEY
-* `name`: VARCHAR, UNIQUE, NOT NULL
-* `description`: VARCHAR
-* `is_active`: BOOLEAN, NOT NULL, DEFAULT `False`
+
+  * `id`, `name` (UNIQUE), `description`, `is_active`, `created_at`, `updated_at`.
 
 **`permissions` table:**
-* `id`: INTEGER, PRIMARY KEY
-* `workspace_id`: INTEGER, FOREIGN KEY (`workspaces.id`)
-* `path`: VARCHAR, NOT NULL
-* `permission_type`: VARCHAR, NOT NULL (`read`, `write`)
-* `rule_type`: VARCHAR, NOT NULL (`allow`, `deny`)
 
-#### B: API Contracts
+  * `id`: INTEGER, PRIMARY KEY
+  * `workspace_id`: INTEGER, FOREIGN KEY, INDEX
+  * `path`: VARCHAR, NOT NULL, INDEX
+  * `permission_type`: VARCHAR, NOT NULL (`read`, `write`)
+  * `rule_type`: VARCHAR, NOT NULL (`allow`, `deny`)
+  * `created_at`, `updated_at`, `created_by`, `updated_by`
+  * **Constraint:** `UNIQUE(workspace_id, path, permission_type, rule_type)`
 
-* `GET /api/browse?path=<string>`: Returns a JSON list of files/folders at a given path within `/source`.
-* `GET /api/workspaces`: Returns a list of all `Workspace` objects.
-* `POST /api/workspaces`: Creates a new workspace. Body: `{ "name": "string", "description": "string" }`.
-* `PUT /api/workspaces/{id}/activate`: Sets a workspace as active.
-* `GET /api/workspaces/{id}/permissions`: Returns a list of all `Permission` objects for a workspace.
-* `POST /api/workspaces/{id}/permissions`: Creates a new permission rule. Body: `{ "path": "string", "permission_type": "string", "rule_type": "string" }`.
-* `DELETE /api/permissions/{id}`: Deletes a specific permission rule.
+#### E: API Contracts
+
+  * **`GET /api/browse`**:
+      * Query Params: `path=<string>`, `maxDepth=<int>`, `page=<int>`, `pageSize=<int>`.
+      * Returns: Paginated list of file/folder objects.
+  * **`PUT /api/config/permissions`**:
+      * Headers: `If-Match: <etag>`.
+      * Returns: `200 OK` on success, `412 Precondition Failed` on ETag mismatch.
+  * **`POST /api/workspaces/{id}/effective-permissions:batch`**:
+      * Body: `{ "paths": ["/path/one", "/path/two"] }`.
+      * Returns: `{ "results": [{ "path": "/path/one", "status": "read", "matchedRule": {...} }] }`.
+  * All endpoints will return standardized JSON errors: `{ "code": "string", "message": "string", "details": {} }`.
+

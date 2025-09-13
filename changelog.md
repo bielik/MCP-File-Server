@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-09-13 - Phase 1: Dynamic Workspace Foundation
+
+### 🎉 Major Features Added
+- **🗂️ Advanced File Explorer UI**
+  - Tree navigation with expandable folders
+  - Breadcrumb navigation with clickable path segments
+  - Professional pagination system with page numbers and item counts
+  - Smooth folder navigation and responsive design
+
+- **🎨 Visual Permission System**
+  - Color-coded permission indicators (Read-Only: Blue, Read-Write: Green, No Access: Gray)
+  - Real-time permission status display for all files and folders
+  - Interactive permission legend with explanations
+  - Tooltip descriptions for each permission level
+
+- **🔐 Secure Browse API**
+  - New `/api/browse` endpoint with comprehensive security hardening
+  - Directory traversal prevention and path validation
+  - Pagination support (configurable page sizes)
+  - File metadata with size and modification timestamps
+
+- **📊 Enhanced User Interface**
+  - Tabbed interface with File Explorer and Server Status views
+  - Permission legend sidebar with recent activity feed
+  - Responsive layout optimized for different screen sizes
+  - Real-time connection status indicators
+
+### 🛡️ Security Enhancements
+- **Path Security**: Comprehensive directory traversal prevention in `/api/browse`
+- **Input Validation**: Proper normalization and validation of all path parameters
+- **Error Handling**: Secure error responses that don't expose file system details
+
+### 🚀 Performance Improvements
+- **Smart Pagination**: Efficient handling of large directories
+- **Optimized File Listing**: Fast directory browsing with metadata caching
+- **Responsive UI**: Smooth interactions with loading states and error handling
+
+### 🔧 API Additions
+- `GET /api/browse` - Secure file system browsing with pagination
+- `GET /api/current-permissions` - Permission status for UI visualization
+
+### 🎨 UI/UX Improvements
+- Modern dark theme with cyan accent colors
+- Professional file and folder icons
+- Intuitive navigation with visual feedback
+- Clear permission status communication
+
+### 📚 Documentation Updates
+- Updated CLAUDE.md with Phase 1 implementation details
+- Enhanced plan.md with completed milestones
+- Updated feature-dynamic-workspaces.md with Phase 1 completion status
+
+### Previous Changes
+
 ### Added
 - **📚 Comprehensive AI Client Setup Documentation** (`README.md` Section 8)
   - Complete Claude Code MCP configuration guide

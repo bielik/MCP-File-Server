@@ -3,7 +3,7 @@ import os
 # For now, permissions are hardcoded. This would eventually query the database.
 # Permission levels: 'context' (read-only), 'working' (read-write)
 PERMISSIONS = {
-    "context": ["docs", "projects"],
+    "context": ["docs", "projects", "materials"],
     "working": ["projects", "output"],
 }
 
