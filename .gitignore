@@ -150,4 +150,6 @@ docker-compose.yml.override
 *.sln.docstates
 
 # Custom
-.gpt/*.txt
+.gpt/
+.gpt/dump.txt
+.gpt/dump.txt
