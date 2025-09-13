@@ -181,7 +181,7 @@ docker-compose up -d
 3. UI establishes WebSocket connection for real-time updates
 
 ### Scenario 2: AI Agent Tool Execution ✅ FULLY IMPLEMENTED
-1. AI client connects to `/ws/mcp` WebSocket endpoint or sends HTTP request to `/mcp`
+1. AI client connects to HTTP endpoint and send request to `/mcp`
 2. Sends MCP `initialize` request, server responds with capabilities
 3. Client sends `tools/list` to discover available tools
 4. Client sends MCP `tools/call` request with parameters
