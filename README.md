@@ -927,8 +927,9 @@ docker-compose exec backend ls -la /shared-fs/
 # Verify your local directory
 ls -la "C:/Users/MartinBielik/MCP Test/"  # or your SHARED_FS_PATH
 
-# Check permission configuration
+# Check permission configuration (single authoritative file)
 docker-compose exec backend cat /config/permissions.json
+# This corresponds to ./config/permissions.json on the host
 ```
 
 **Missing Configuration File:**
