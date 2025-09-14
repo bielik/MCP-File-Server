@@ -53,11 +53,13 @@ class ConfigPermissionService:
         self._setup_file_watcher()
 
     def _load_config(self):
-        """Load permission rules from config file."""
+        """Load permission rules from config file, creating default if missing."""
         config_path = self.config.get_permissions_config_path()
 
         if not config_path.exists():
-            raise FileNotFoundError(f"Permission config file not found: {config_path}")
+            print(f"Permission config file not found at {config_path}")
+            print("Creating default configuration from schema...")
+            self._create_default_config()
 
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -75,6 +77,77 @@ class ConfigPermissionService:
             raise ValueError(f"Invalid JSON in permission config: {e}")
         except Exception as e:
             raise RuntimeError(f"Failed to load permission config: {e}")
+
+    def _create_default_config(self):
+        """Create default permission configuration file."""
+        config_path = self.config.get_permissions_config_path()
+
+        # Ensure config directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Default configuration schema with minimal permissions for safety
+        default_config = {
+            "$schema": {
+                "title": "Permission Configuration Schema",
+                "description": "Schema for MCP KnowledgeExplorer permission rules",
+                "version": "1.0.0"
+            },
+            "metadata": {
+                "version": "1.0.0",
+                "created_at": "auto-generated",
+                "description": "Default permission configuration - PLEASE CUSTOMIZE FOR YOUR NEEDS"
+            },
+            "rules": [
+                {
+                    "id": "default-projects-read",
+                    "path": "projects",
+                    "permission_type": "read",
+                    "rule_type": "allow",
+                    "description": "Default read access to projects directory",
+                    "created_at": "auto-generated"
+                },
+                {
+                    "id": "default-projects-write",
+                    "path": "projects",
+                    "permission_type": "write",
+                    "rule_type": "allow",
+                    "description": "Default write access to projects directory",
+                    "created_at": "auto-generated"
+                }
+            ],
+            "precedence_rules": {
+                "description": "Formal precedence rules for permission resolution",
+                "rules": [
+                    "1. Specificity: A rule on a child path is more specific than a rule on a parent path",
+                    "2. Tie-Breaker: For rules of equal specificity, deny wins over allow",
+                    "3. Implied Permissions: A write permission implicitly grants read",
+                    "4. Default: If no rule matches, access is denied"
+                ]
+            },
+            "validation": {
+                "required_fields": ["id", "path", "permission_type", "rule_type"],
+                "valid_permission_types": ["read", "write"],
+                "valid_rule_types": ["allow", "deny"],
+                "path_format": "Relative paths within /shared-fs mount point"
+            }
+        }
+
+        # Write default config with atomic operation
+        temp_path = config_path.with_suffix('.tmp')
+        try:
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=2, ensure_ascii=False)
+
+            # Atomic move
+            temp_path.replace(config_path)
+            print(f"✅ Created default permission config at {config_path}")
+            print("⚠️  IMPORTANT: Review and customize the generated permissions for your security needs!")
+
+        except Exception as e:
+            # Clean up on error
+            if temp_path.exists():
+                temp_path.unlink()
+            raise RuntimeError(f"Failed to create default config: {e}")
 
     def _parse_and_load_rules(self, config_data: Dict[str, Any]):
         """Parse config data and load rules into the trie."""

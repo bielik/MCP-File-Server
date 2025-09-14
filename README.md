@@ -931,6 +931,13 @@ ls -la "C:/Users/MartinBielik/MCP Test/"  # or your SHARED_FS_PATH
 docker-compose exec backend cat /config/permissions.json
 ```
 
+**Missing Configuration File:**
+If `config/permissions.json` is missing, the system will automatically create a default configuration:
+- Creates minimal safe permissions (projects directory read/write only)
+- Includes complete schema and documentation
+- Shows clear warning to customize for your security needs
+- System will NOT crash - graceful fallback with safe defaults
+
 ### 15.4. Getting Help
 
 - **Issues**: Check existing issues and create new ones for bugs/features
