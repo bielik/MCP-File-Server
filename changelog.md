@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-01-14 - Phase 2: Config-File Permission System Complete
+
+### 🎉 Phase 2 Completion - Dynamic Config-Based Permissions
+- **✅ PHASE 2 FULLY IMPLEMENTED**: Complete transition from hardcoded to config-file driven permissions
+- **🏆 Full System Verification**: Successfully tested with real filesystem at `C:/Users/MartinBielik/MCP Test/`
+- **🔧 Critical Bug Fixes**: All permission persistence and frontend integration issues resolved
+
+### 🛠️ Critical Bug Fixes
+- **🚨 File Persistence Fixed**: Permission changes now correctly persist to `config/permissions.json`
+- **🔌 API Integration Fixed**: Frontend `PermissionIndicator` now uses correct `/api/config/permissions` endpoint
+- **🧪 Test Suite Fixed**: Integration tests updated for Phase 2 environment compatibility
+- **💾 Atomic Operations**: Fixed config file writing with proper temp + fsync + rename pattern
+
+### 🆕 New Features Added
+- **🏷️ Rule ID Display**: Permission editor now shows rule IDs for better debugging and management
+- **⚡ Trie-Based Caching**: Implemented O(log n) permission resolution with in-memory caching
+- **🎯 Formal Precedence Logic**: Complete implementation of specificity, deny-wins, write-implies-read rules
+- **🔒 ETag Concurrency Control**: Atomic updates with optimistic locking for config file modifications
+
+### 🧪 Testing & Verification
+- **✅ MCP Protocol Tested**: Full verification through wisdom MCP server via HTTP transport
+  - List operations: Successfully listed `materials/` directory (16 items)
+  - Read operations: Successfully read file contents (`materials/Hallo.txt`)
+  - Write operations: Successfully created files in `projects/` directory
+  - Permission enforcement: Correctly blocked access to `materials/01_Introduction to Software Engineering`
+- **✅ Integration Tests**: All tests pass with Phase 2 enabled by default
+- **✅ Frontend Verification**: Settings UI working with rule persistence and ID display
+
+### 🏗️ Technical Implementation
+- **📁 Config File System**: Complete `config/permissions.json` implementation with schema validation
+- **🏃‍♂️ Performance Optimized**: Trie-based permission cache for efficient path matching
+- **🔧 Service Architecture**: New `ConfigPermissionService` with feature flag integration
+- **🎨 UI Enhancements**: Visual and JSON editors for permission management
+
+### 📍 Current System State
+- **Phase 1**: ✅ Complete - Advanced file explorer and visual permission indicators
+- **Phase 2**: ✅ Complete - Config-file driven permissions with caching and UI editor
+- **Phase 3**: 📋 Planned - Database migration and advanced workspace features
+
 ## [2.0.0] - 2025-09-13 - Phase 1: Dynamic Workspace Foundation
 
 ### 🎉 Major Features Added

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import FileExplorer from './components/FileExplorer';
 import { PermissionIndicator, PermissionLegend } from './components/PermissionIndicator';
+import Settings from './pages/Settings';
 
 function App() {
   const [config, setConfig] = useState<any>(null);
   const [status, setStatus] = useState('Connecting...');
   const [logs, setLogs] = useState<string[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'explorer' | 'status'>('explorer');
+  const [activeTab, setActiveTab] = useState<'explorer' | 'status' | 'settings'>('explorer');
 
   useEffect(() => {
     // This flag helps prevent issues with React 18's StrictMode double-invoking effects.
@@ -85,7 +86,7 @@ function App() {
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
               }`}
             >
-              File Explorer
+              📁 File Explorer
             </button>
             <button
               onClick={() => setActiveTab('status')}
@@ -95,7 +96,17 @@ function App() {
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
               }`}
             >
-              Server Status
+              📊 Server Status
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              ⚙️ Settings
             </button>
           </div>
         </div>
@@ -210,6 +221,12 @@ function App() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-lg shadow-lg min-h-screen -m-8 p-8">
+            <Settings />
           </div>
         )}
       </div>

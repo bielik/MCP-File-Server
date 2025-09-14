@@ -11,6 +11,13 @@ export default defineConfig({
     watch: {
       usePolling: true, // Use polling for file changes
     },
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   resolve: {
     alias: {

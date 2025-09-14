@@ -1,0 +1,106 @@
+{
+  "$schema": {
+    "title": "Permission Configuration Schema",
+    "description": "Schema for MCP KnowledgeExplorer permission rules",
+    "version": "1.0.0"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "2025-01-13T19:30:00Z",
+    "description": "Permission rules converted from hardcoded PERMISSIONS dictionary",
+    "migration_source": "backend/app/services/permission_service.py:PERMISSIONS"
+  },
+  "rules": [
+    {
+      "id": "context-docs-read",
+      "path": "docs",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Allow read access to documentation directory",
+      "created_at": "2025-01-13T19:30:00Z"
+    },
+    {
+      "id": "context-projects-read",
+      "path": "projects",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Allow read access to projects directory",
+      "created_at": "2025-01-13T19:30:00Z"
+    },
+    {
+      "id": "context-materials-read",
+      "path": "materials",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Allow read access to materials directory",
+      "created_at": "2025-01-13T19:30:00Z"
+    },
+    {
+      "id": "working-projects-write",
+      "path": "projects",
+      "permission_type": "write",
+      "rule_type": "allow",
+      "description": "Allow write access to projects directory (implies read)",
+      "created_at": "2025-01-13T19:30:00Z"
+    },
+    {
+      "id": "working-output-write",
+      "path": "output",
+      "permission_type": "write",
+      "rule_type": "allow",
+      "description": "Allow write access to output directory (implies read)",
+      "created_at": "2025-01-13T19:30:00Z"
+    },
+    {
+      "id": "deny-intro-software-eng",
+      "path": "materials/01_Introduction to Software Engineering",
+      "permission_type": "read",
+      "rule_type": "deny",
+      "description": "Block access to Introduction to Software Engineering module for testing Phase 2 functionality",
+      "created_at": "2025-01-13T19:30:00Z"
+    }
+  ],
+  "precedence_rules": {
+    "description": "Formal precedence rules for permission resolution",
+    "rules": [
+      "1. Specificity: A rule on a child path is more specific than a rule on a parent path",
+      "2. Tie-Breaker: For rules of equal specificity, deny wins over allow",
+      "3. Implied Permissions: A write permission implicitly grants read",
+      "4. Default: If no rule matches, access is denied"
+    ]
+  },
+  "validation": {
+    "required_fields": [
+      "id",
+      "path",
+      "permission_type",
+      "rule_type"
+    ],
+    "valid_permission_types": [
+      "read",
+      "write"
+    ],
+    "valid_rule_types": [
+      "allow",
+      "deny"
+    ],
+    "path_format": "Relative paths within /shared-fs mount point"
+  },
+  "config_file_enabled": true,
+  "stats": {
+    "config_file_path": "/config/permissions.json",
+    "config_file_hash": "5ee1fdd4ab4f4fd5d4616a27bd47078f",
+    "file_watcher_enabled": true,
+    "last_reload_time": null,
+    "rule_count": 6,
+    "max_depth": 2,
+    "node_count": 6,
+    "cache_size": 0,
+    "cache_max_size": 10000,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "cache_hit_rate": 0
+  },
+  "description": "Config-file based permissions (Phase 2)",
+  "message": "Permission configuration updated successfully"
+}

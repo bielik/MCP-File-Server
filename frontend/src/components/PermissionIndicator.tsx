@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 
-interface PermissionData {
-  permissions: {
-    context: string[];
-    working: string[];
-  };
+interface PermissionRule {
+  id: string;
+  path: string;
+  permission_type: 'read' | 'write';
+  rule_type: 'allow' | 'deny';
   description: string;
-  context_description: string;
-  working_description: string;
+}
+
+interface ConfigPermissionData {
+  metadata: {
+    version: string;
+    created_at: string;
+    description: string;
+  };
+  rules: PermissionRule[];
+  config_file_enabled: boolean;
+  description: string;
 }
 
 interface PermissionIndicatorProps {
@@ -15,26 +24,26 @@ interface PermissionIndicatorProps {
   className?: string;
 }
 
-type PermissionLevel = 'none' | 'context' | 'working';
+type PermissionLevel = 'none' | 'read' | 'write' | 'denied';
 
 export const PermissionIndicator: React.FC<PermissionIndicatorProps> = ({
   path,
   className = ""
 }) => {
-  const [permissions, setPermissions] = useState<PermissionData | null>(null);
+  const [permissions, setPermissions] = useState<ConfigPermissionData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPermissions = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/current-permissions');
+        const response = await fetch('http://localhost:8000/api/config/permissions');
 
         if (!response.ok) {
           throw new Error(`Failed to fetch permissions: ${response.statusText}`);
         }
 
-        const data: PermissionData = await response.json();
+        const data: ConfigPermissionData = await response.json();
         setPermissions(data);
         setError(null);
       } catch (err) {
@@ -49,19 +58,57 @@ export const PermissionIndicator: React.FC<PermissionIndicatorProps> = ({
   }, []);
 
   const getPermissionLevel = (filePath: string): PermissionLevel => {
-    if (!permissions) return 'none';
+    if (!permissions || !permissions.rules) return 'none';
 
-    // Extract the top-level directory from the path
-    const topLevelDir = filePath.split('/')[0] || filePath;
+    // Normalize the path for matching
+    const normalizedPath = filePath.replace(/^\/+/, '').replace(/\/+$/, '');
 
-    // Check if it's in working directories (read-write)
-    if (permissions.permissions.working.includes(topLevelDir)) {
-      return 'working';
+    // Find all matching rules
+    const matchingRules = permissions.rules.filter(rule => {
+      const rulePath = rule.path.replace(/^\/+/, '').replace(/\/+$/, '');
+
+      // Check if the path matches exactly or is a child of the rule path
+      return normalizedPath === rulePath || normalizedPath.startsWith(rulePath + '/');
+    });
+
+    if (matchingRules.length === 0) {
+      return 'none'; // Default deny
     }
 
-    // Check if it's in context directories (read-only)
-    if (permissions.permissions.context.includes(topLevelDir)) {
-      return 'context';
+    // Sort by specificity (deeper paths are more specific)
+    matchingRules.sort((a, b) => {
+      const aDepth = a.path.split('/').length;
+      const bDepth = b.path.split('/').length;
+      return bDepth - aDepth; // Most specific first
+    });
+
+    // Group by specificity level
+    const mostSpecificDepth = matchingRules[0].path.split('/').length;
+    const mostSpecificRules = matchingRules.filter(rule =>
+      rule.path.split('/').length === mostSpecificDepth
+    );
+
+    // Apply "deny wins" rule for same specificity
+    const denyRule = mostSpecificRules.find(rule => rule.rule_type === 'deny');
+    if (denyRule) {
+      return 'denied';
+    }
+
+    // Find the highest permission level among allow rules
+    const allowRules = mostSpecificRules.filter(rule => rule.rule_type === 'allow');
+
+    if (allowRules.length === 0) {
+      return 'none';
+    }
+
+    // Write permission implies read (highest level)
+    if (allowRules.some(rule => rule.permission_type === 'write')) {
+      return 'write';
+    }
+
+    // Read permission only
+    if (allowRules.some(rule => rule.permission_type === 'read')) {
+      return 'read';
     }
 
     return 'none';
@@ -71,7 +118,7 @@ export const PermissionIndicator: React.FC<PermissionIndicatorProps> = ({
 
   const getPermissionConfig = (level: PermissionLevel) => {
     switch (level) {
-      case 'working':
+      case 'write':
         return {
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -84,7 +131,7 @@ export const PermissionIndicator: React.FC<PermissionIndicatorProps> = ({
           label: 'Read-Write',
           tooltip: 'Full read and write access'
         };
-      case 'context':
+      case 'read':
         return {
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -96,7 +143,20 @@ export const PermissionIndicator: React.FC<PermissionIndicatorProps> = ({
           bgColor: 'bg-blue-900/30',
           borderColor: 'border-blue-600',
           label: 'Read-Only',
-          tooltip: 'Read-only access for context'
+          tooltip: 'Read-only access'
+        };
+      case 'denied':
+        return {
+          icon: (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
+            </svg>
+          ),
+          color: 'text-red-400',
+          bgColor: 'bg-red-900/30',
+          borderColor: 'border-red-600',
+          label: 'Denied',
+          tooltip: 'Access explicitly denied'
         };
       case 'none':
       default:
@@ -178,6 +238,16 @@ export const PermissionLegend: React.FC<PermissionLegendProps> = ({ className = 
             <span className="font-medium">Read-Only</span>
           </div>
           <span className="text-gray-400">Read-only access for context</span>
+        </div>
+
+        <div className="flex items-center">
+          <div className="inline-flex items-center px-2 py-1 rounded border bg-red-900/30 border-red-600 text-red-400 mr-2">
+            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
+            </svg>
+            <span className="font-medium">Denied</span>
+          </div>
+          <span className="text-gray-400">Access explicitly denied</span>
         </div>
 
         <div className="flex items-center">

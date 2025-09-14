@@ -1,10 +1,12 @@
 import os
 import math
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Header, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.services import permission_service
+from app.config import get_feature_flags, get_config
 
 router = APIRouter()
 
@@ -133,23 +135,66 @@ def browse_files(
 @router.get("/current-permissions")
 def get_current_permissions():
     """
-    Returns the current hardcoded permissions for the UI to display.
+    Returns the current permissions in frontend-compatible format.
     """
-    return {
-        "permissions": permission_service.PERMISSIONS,
-        "description": "Current hardcoded permission levels",
-        "context_description": "Read-only access to specified directories",
-        "working_description": "Read-write access to specified directories"
-    }
+    feature_flags = get_feature_flags()
+
+    if not feature_flags.is_config_permissions_enabled():
+        # Return legacy hardcoded permissions
+        return {
+            "permissions": permission_service.PERMISSIONS,
+            "description": "Hardcoded permission levels (Phase 1)",
+            "context_description": "Read-only access to specified directories",
+            "working_description": "Read-write access to specified directories",
+            "config_file_enabled": False
+        }
+
+    try:
+        from app.services.config_permission_service import get_permission_service
+        service = get_permission_service()
+
+        # Convert config-file format to frontend-compatible format
+        config_data = service.get_config_data()
+
+        # Extract paths by permission type and rule type
+        context_paths = []
+        working_paths = []
+
+        for rule in config_data.get("rules", []):
+            path = rule["path"]
+            perm_type = rule["permission_type"]
+            rule_type = rule["rule_type"]
+
+            if rule_type == "allow":
+                if perm_type == "read":
+                    context_paths.append(path)
+                elif perm_type == "write":
+                    working_paths.append(path)
+
+        return {
+            "permissions": {
+                "context": context_paths,
+                "working": working_paths
+            },
+            "description": "Config-file based permissions (Phase 2)",
+            "context_description": "Read-only access to specified directories",
+            "working_description": "Read-write access to specified directories",
+            "config_file_enabled": True
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load permission config: {str(e)}")
 
 @router.get("/config")
-def get_config():
+def get_server_config():
     """
     Returns the initial server configuration for the UI.
     """
-    # This will be populated with actual config data from the DB or files.
+    config = get_config()
+    feature_flags = get_feature_flags()
+
     return {
-        "server_port": 8000,
+        "server_port": config.BACKEND_PORT,
         "permissions": {
             "context": ["/shared-fs/docs"],
             "working": ["/shared-fs/projects"],
@@ -158,5 +203,161 @@ def get_config():
         "file_system_stats": {
             "total_files": 1024,
             "total_size_mb": 256
-        }
+        },
+        "feature_flags": feature_flags.to_dict(),
+        "config_file_permissions_enabled": feature_flags.is_config_permissions_enabled()
     }
+
+
+class PermissionConfigRequest(BaseModel):
+    """Request model for permission configuration updates."""
+    config: Dict[str, Any]
+
+
+@router.get("/config/permissions")
+def get_permissions_config():
+    """
+    Returns the current permission configuration with ETag for concurrency control.
+    """
+    feature_flags = get_feature_flags()
+
+    if not feature_flags.is_config_permissions_enabled():
+        # Return legacy hardcoded permissions
+        response_data = {
+            "permissions": permission_service.PERMISSIONS,
+            "description": "Hardcoded permission levels (Phase 1)",
+            "context_description": "Read-only access to specified directories",
+            "working_description": "Read-write access to specified directories",
+            "config_file_enabled": False
+        }
+        return JSONResponse(
+            content=response_data,
+            headers={"ETag": "legacy-hardcoded"}
+        )
+
+    try:
+        from app.services.config_permission_service import get_permission_service
+        service = get_permission_service()
+
+        config_data = service.get_config_data()
+        etag = service.get_config_etag()
+        stats = service.get_stats()
+
+        response_data = {
+            **config_data,
+            "config_file_enabled": True,
+            "stats": stats,
+            "description": "Config-file based permissions (Phase 2)"
+        }
+
+        return JSONResponse(
+            content=response_data,
+            headers={"ETag": f'"{etag}"'}
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load permission config: {str(e)}")
+
+
+@router.put("/config/permissions")
+def update_permissions_config(
+    request: PermissionConfigRequest,
+    if_match: Optional[str] = Header(None, alias="If-Match")
+):
+    """
+    Updates the permission configuration with optimistic locking via ETag.
+    Returns 412 Precondition Failed if ETag doesn't match.
+    """
+    feature_flags = get_feature_flags()
+
+    if not feature_flags.is_config_permissions_enabled():
+        raise HTTPException(
+            status_code=501,
+            detail="Config file permissions are not enabled. Set ENABLE_CONFIG_FILE_PERMISSIONS=true"
+        )
+
+    if not if_match:
+        raise HTTPException(
+            status_code=400,
+            detail="If-Match header is required for concurrency control"
+        )
+
+    # Remove quotes from ETag if present
+    expected_etag = if_match.strip('"')
+
+    try:
+        from app.services.config_permission_service import get_permission_service
+        service = get_permission_service()
+
+        # Update with optimistic locking
+        new_etag = service.update_config(request.config, expected_etag)
+
+        # Return updated config with new ETag
+        updated_config = service.get_config_data()
+
+        return JSONResponse(
+            content={
+                **updated_config,
+                "message": "Permission configuration updated successfully",
+                "config_file_enabled": True
+            },
+            headers={"ETag": f'"{new_etag}"'}
+        )
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "Expected ETag" in error_msg:
+            # ETag mismatch - conflict
+            raise HTTPException(
+                status_code=412,
+                detail={
+                    "code": "ETAG_MISMATCH",
+                    "message": "Configuration has been modified by another process",
+                    "details": {"error": error_msg}
+                }
+            )
+        else:
+            # Validation error
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "Invalid configuration data",
+                    "details": {"error": error_msg}
+                }
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "UPDATE_FAILED",
+                "message": "Failed to update permission configuration",
+                "details": {"error": str(e)}
+            }
+        )
+
+
+@router.get("/config/permissions/stats")
+def get_permissions_stats():
+    """
+    Returns performance statistics for the permission system.
+    """
+    feature_flags = get_feature_flags()
+
+    if not feature_flags.is_config_permissions_enabled():
+        return {
+            "config_file_enabled": False,
+            "message": "Config file permissions are not enabled"
+        }
+
+    try:
+        from app.services.config_permission_service import get_permission_service
+        service = get_permission_service()
+
+        return {
+            "config_file_enabled": True,
+            **service.get_stats()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get permission stats: {str(e)}")
