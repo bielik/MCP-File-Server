@@ -272,6 +272,10 @@ class CachedPermissionTrie:
         self.trie.clear()
         self._invalidate_cache()
 
+    def clear_cache(self):
+        """Clear cache only (alias for clear)."""
+        self.clear()
+
     def get_stats(self) -> Dict[str, Any]:
         """Get performance statistics."""
         trie_stats = self.trie.get_stats()

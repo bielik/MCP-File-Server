@@ -1,0 +1,58 @@
+{
+  "rules": [
+    {
+      "id": "migration-rule-001",
+      "path": "materials",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Allow read access to materials directory for migration testing"
+    },
+    {
+      "id": "migration-rule-002",
+      "path": "projects",
+      "permission_type": "write",
+      "rule_type": "allow",
+      "description": "Allow write access to projects directory for migration testing"
+    },
+    {
+      "id": "migration-rule-003",
+      "path": "materials/01_Introduction to Software Engineering",
+      "permission_type": "read",
+      "rule_type": "deny",
+      "description": "Block access to Introduction to Software Engineering module during migration test"
+    },
+    {
+      "id": "migration-rule-004",
+      "path": "data/exports",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Allow read access to data exports for migration validation"
+    },
+    {
+      "id": "migration-rule-005",
+      "path": "config/sensitive",
+      "permission_type": "read",
+      "rule_type": "deny",
+      "description": "Block access to sensitive configuration during migration"
+    }
+  ],
+  "description": "Migration test configuration with complex precedence rules",
+  "version": "1.2",
+  "metadata": {
+    "created_for": "Phase 3A migration testing",
+    "test_scenarios": [
+      "Basic allow rules",
+      "Explicit deny rules",
+      "Precedence testing",
+      "Complex path hierarchies"
+    ]
+  },
+  "precedence_rules": {
+    "rules": [
+      "1. Specificity: Child paths override parent paths",
+      "2. Deny wins: For equal specificity, deny overrides allow",
+      "3. Write implies read: Write permission grants read access",
+      "4. Default deny: No matching rules = access denied"
+    ]
+  }
+}

@@ -5,37 +5,40 @@
 **Type:** Full-stack web application with MCP (Model Context Protocol) server
 **Purpose:** A sophisticated, local-first Model Context Protocol server that enables AI agents to assist with research, providing a web-based UI for configuration, real-time monitoring, and granular permission management over the local file system.
 
-## 🎉 MAJOR MILESTONE: Phase 2 Complete - Dynamic Config-Based Permissions
-**Status:** ✅ **PHASE 2 COMPLETE - Config-File Driven Permission System**
+## 🎉 MAJOR MILESTONE: Phase 3A Complete - Database-Driven Workspace System
+**Status:** ✅ **PHASE 3A COMPLETE - Database-Driven Permission System with Full Workspace Backend**
 
-We have successfully completed Phase 2 of the dynamic workspace system! The MCP KnowledgeExplorer now features a comprehensive config-file driven permission system with advanced caching, formal precedence logic, and a professional permission editor UI. All Phase 2 functionality has been implemented, tested, and verified working with real filesystem operations.
+We have successfully completed Phase 3A of the dynamic workspace system! The MCP KnowledgeExplorer now features a complete database-driven workspace and permission system with comprehensive CRUD APIs, batch permission resolution, audit logging, and automated migration capabilities. All Phase 3A functionality has been implemented, thoroughly tested, and is production-ready.
 
-**Phase 2 Achievements:**
-- ✅ Complete MCP JSON-RPC 2.0 protocol implementation
-- ✅ File system tools: `read_file`, `list_files`, `write_file`
-- ✅ **🆕 Config-File Permission System**: Fully migrated from hardcoded to `config/permissions.json`
-- ✅ **🆕 Trie-Based Caching**: High-performance permission resolution with in-memory cache
-- ✅ **🆕 Formal Precedence Logic**: Comprehensive permission resolution with specificity rules
-- ✅ **🆕 Permission Editor UI**: Full-featured visual and JSON editor with rule ID display
-- ✅ **🆕 File Watcher Integration**: Automatic config reload when permissions.json changes
-- ✅ **🆕 Feature Flags System**: Safe deployment with Phase 2/3 feature toggles
-- ✅ **🆕 Atomic Config Updates**: Safe multi-user editing with optimistic locking
-- ✅ **🆕 Bug Fixes Complete**: Permission persistence, frontend integration, rule ID display all working
+**Phase 3A Achievements:**
+- ✅ **🆕 Complete Database Schema**: Full `Workspace` and `Permission` SQLAlchemy models with constraints
+- ✅ **🆕 Workspace Management**: Full CRUD APIs for workspace creation, activation, and management
+- ✅ **🆕 Permission Management**: Complete permission CRUD with workspace context and validation
+- ✅ **🆕 Batch Permission API**: High-performance `POST /api/workspaces/{id}/effective-permissions:batch` endpoint
+- ✅ **🆕 Database Permission Service**: New `DatabasePermissionService` with preserved Trie caching
+- ✅ **🆕 Audit Logging System**: Comprehensive structured audit events for all permission decisions
+- ✅ **🆕 Migration Script**: Complete, idempotent migration from config files to database
+- ✅ **🆕 Comprehensive Test Suite**: Full Phase 3A test coverage with performance validation
+- ✅ Complete MCP JSON-RPC 2.0 protocol implementation (Phase 2 maintained)
+- ✅ File system tools: `read_file`, `list_files`, `write_file` (Phase 2 maintained)
+- ✅ Config-File Permission System (Phase 2 maintained for backward compatibility)
+- ✅ Trie-Based Caching: High-performance permission resolution (enhanced for database)
+- ✅ Formal Precedence Logic: Comprehensive permission resolution (enhanced)
 - ✅ Real-time activity logging via WebSocket to UI
 - ✅ Advanced file explorer with tree navigation and visual permission indicators
-- ✅ Enhanced UI with tabbed interface and permission legend
 
 ## Architecture: The "Unified Hub" Model
 The system follows a **"Unified Hub"** architecture pattern - a single, persistent backend server acts as the central point of control for all clients (both browser UI and AI agents). Think of it as a permanent restaurant where all customers come through the same front door and are handled by the same staff.
 
 ## Technology Stack
 
-### Backend (Python/FastAPI) - ✅ FULLY IMPLEMENTED
+### Backend (Python/FastAPI) - ✅ PHASE 3A COMPLETE
 - **Framework:** FastAPI with async/await support
 - **MCP Protocol:** Complete JSON-RPC 2.0 implementation (MCP 2024-11-05)
-- **Database:** SQLite for persistent state storage
+- **Database:** SQLite for persistent state storage with full workspace/permission schema
 - **Real-time:** WebSockets for live communication
-- **Security:** Config-file based permission system with Trie caching
+- **Security:** Database-driven permission system with workspace contexts and Trie caching
+- **New Features:** Workspace CRUD, Batch permission resolution, Audit logging, Migration scripts
 - **Dependencies:**
   - fastapi, uvicorn[standard], sqlalchemy, websockets, python-dotenv, watchdog
 - **Port:** 8000 (configurable via BACKEND_PORT env var)
@@ -204,12 +207,18 @@ docker-compose up -d
 20. **Enhanced UI:** Tabbed interface with File Explorer, Permission Editor, and Server Status
 21. **Permission Legend:** Clear documentation of permission levels in sidebar
 
-### 🚧 Next: Phase 3 - Database-Driven Permissions
-1. **Database Schema:** Migrate config to SQLite with versioning
-2. **User Management:** Add user-specific permission contexts
-3. **Audit Logging:** Track permission changes and access attempts
-4. **API Keys:** Secure MCP server access with client authentication
-5. **Multi-Tenant Support:** Isolated workspaces for different users/projects
+### ✅ Complete: Phase 3A - Database-Driven Permissions
+1. ✅ **Database Schema:** Complete migration to SQLite with full workspace and permission models
+2. ✅ **Workspace Management:** Full workspace CRUD with activation and context switching
+3. ✅ **Audit Logging:** Comprehensive tracking of all permission changes and access attempts
+4. ✅ **Migration Tools:** Complete, idempotent config-to-database migration script
+5. ✅ **Batch Permission API:** High-performance endpoint for efficient UI integration
+
+### 🚧 Next: Phase 3B - Advanced Workspace UI
+1. **Workspace UI Components:** Create, delete, and activate workspaces from the UI
+2. **Two-Panel Permission Editor:** Full visual workspace permission management
+3. **"Inspect Permission" Feature:** Detailed permission explanations with matched rule info
+4. **Real-time Workspace Switching:** Dynamic UI updates when workspace context changes
 
 ### 📋 Future Enhancements
 1. **Search Features:** Keyword and semantic search capabilities
@@ -242,8 +251,8 @@ Key configuration options in `.env`:
 - `FRONTEND_PORT`: Frontend dev server port (default: 5173)
 - `DATABASE_PATH`: SQLite database location (default: ./data)
 - `SHARED_FS_PATH`: Shared file system mount (default: C:/Users/MartinBielik/MCP Test)
-- `ENABLE_CONFIG_FILE_PERMISSIONS`: Enable Phase 2 features (default: true)
-- `ENABLE_DATABASE_PERMISSIONS`: Enable Phase 3 features (default: false)
+- `ENABLE_CONFIG_FILE_PERMISSIONS`: Enable Phase 2 features (default: true, maintained for compatibility)
+- `ENABLE_DATABASE_PERMISSIONS`: Enable Phase 3A features (default: true, production-ready)
 - `PERMISSION_CACHE_TTL`: Cache TTL in seconds (default: 300)
 - `PERMISSION_CACHE_MAX_SIZE`: Max cache entries (default: 10000)
 
@@ -289,16 +298,33 @@ curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
 - `mcp__wisdom__list_files` - List directory contents
 - `mcp__wisdom__write_file` - Write file contents (subject to permissions)
 
-### Permission Management
+### Workspace & Permission Management (Phase 3A)
 ```bash
-# View current permission config
-curl http://localhost:8000/api/config/permissions
-
-# Update permissions (requires ETag for optimistic locking)
-curl -X PUT http://localhost:8000/api/config/permissions \
+# Workspace Management
+curl http://localhost:8000/api/workspaces                    # List all workspaces
+curl -X POST http://localhost:8000/api/workspaces \          # Create workspace
   -H "Content-Type: application/json" \
-  -H "If-Match: current-etag-value" \
-  -d @new-permissions.json
+  -d '{"name": "My Workspace", "description": "Test workspace", "is_active": true}'
+
+curl -X PUT http://localhost:8000/api/workspaces/1/activate  # Activate workspace
+
+# Permission Management within Workspaces
+curl http://localhost:8000/api/workspaces/1/permissions      # List workspace permissions
+curl -X POST http://localhost:8000/api/workspaces/1/permissions \ # Add permission
+  -H "Content-Type: application/json" \
+  -d '{"path": "projects", "permission_type": "write", "rule_type": "allow"}'
+
+# Batch Effective Permissions (Cornerstone API for UI)
+curl -X POST http://localhost:8000/api/workspaces/1/effective-permissions:batch \
+  -H "Content-Type: application/json" \
+  -d '{"paths": ["/materials/docs", "/projects/app", "/private/secret"]}'
+
+# Migration from Phase 2 Config
+python -m app.scripts.migrate_config_to_db --workspace-name "Legacy Config" --activate --dry-run
+python -m app.scripts.migrate_config_to_db --workspace-name "Legacy Config" --activate  # Actual migration
+
+# Legacy Permission Management (Phase 2 - Still Available)
+curl http://localhost:8000/api/config/permissions           # View current config
 ```
 
 ## Testing Strategy
@@ -321,11 +347,11 @@ curl -X PUT http://localhost:8000/api/config/permissions \
 - ~~Rule IDs not displayed in UI~~ **FIXED: Rule ID display in permission editor**
 - ~~Integration tests failing in Phase 2 environment~~ **FIXED: All tests passing**
 
-### 🚧 Current Focus: Phase 3 Preparation
-- **Priority 1:** Database schema design for permission storage
-- **Priority 2:** User management system integration
-- **Priority 3:** Audit logging for compliance requirements
-- **Priority 4:** API key authentication for MCP clients
+### 🚧 Current Focus: Phase 3B - Advanced Workspace UI
+- **Priority 1:** Workspace management UI components (create, delete, activate)
+- **Priority 2:** Two-panel permission editor with batch API integration
+- **Priority 3:** "Inspect Permission" tooltip/modal with matched rule explanations
+- **Priority 4:** Real-time workspace context switching with UI updates
 
 ### 📋 Future Work
 - Multi-tenant permission contexts

@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Development Environment",
+    "description": "Workspace for active development tasks with full access to code repositories",
+    "is_active": true
+  },
+  {
+    "name": "Testing Environment",
+    "description": "Isolated workspace for testing and quality assurance activities",
+    "is_active": false
+  },
+  {
+    "name": "Production Monitoring",
+    "description": "Read-only workspace for monitoring production systems and logs",
+    "is_active": false
+  },
+  {
+    "name": "Research & Documentation",
+    "description": "Workspace focused on research tasks and documentation access",
+    "is_active": false
+  },
+  {
+    "name": "Client Projects",
+    "description": "Workspace for client-specific project files and deliverables",
+    "is_active": false
+  }
+]

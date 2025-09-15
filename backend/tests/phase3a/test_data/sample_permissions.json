@@ -1,0 +1,62 @@
+[
+  {
+    "path": "materials",
+    "permission_type": "read",
+    "rule_type": "allow",
+    "description": "Allow read access to educational materials and documentation"
+  },
+  {
+    "path": "projects",
+    "permission_type": "write",
+    "rule_type": "allow",
+    "description": "Allow full write access to active project directories"
+  },
+  {
+    "path": "materials/confidential",
+    "permission_type": "read",
+    "rule_type": "deny",
+    "description": "Block access to confidential educational content"
+  },
+  {
+    "path": "projects/archived",
+    "permission_type": "write",
+    "rule_type": "deny",
+    "description": "Prevent modifications to archived project files"
+  },
+  {
+    "path": "logs",
+    "permission_type": "read",
+    "rule_type": "allow",
+    "description": "Allow read access to system and application logs"
+  },
+  {
+    "path": "config",
+    "permission_type": "read",
+    "rule_type": "allow",
+    "description": "Allow read access to configuration files"
+  },
+  {
+    "path": "config/secrets",
+    "permission_type": "read",
+    "rule_type": "deny",
+    "description": "Block access to sensitive configuration secrets"
+  },
+  {
+    "path": "temp",
+    "permission_type": "write",
+    "rule_type": "allow",
+    "description": "Allow temporary file creation and modification"
+  },
+  {
+    "path": "backups",
+    "permission_type": "read",
+    "rule_type": "allow",
+    "description": "Allow read-only access to backup files"
+  },
+  {
+    "path": "private",
+    "permission_type": "read",
+    "rule_type": "deny",
+    "description": "Block all access to private directories"
+  }
+]

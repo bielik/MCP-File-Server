@@ -1,5 +1,6 @@
 import os
 import json
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +14,25 @@ from app.api.websockets import ConnectionManager
 from app.services import mcp_service, file_service
 from app.schemas import mcp as mcp_schemas
 
-app = FastAPI(title="MCP KnowledgeExplorer Hub")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    create_db_and_tables()
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(title="MCP KnowledgeExplorer Hub", lifespan=lifespan)
+
+# Custom exception handler for structured error responses
+from app.api.endpoints import StructuredHTTPException
+
+@app.exception_handler(StructuredHTTPException)
+async def structured_exception_handler(request: Request, exc: StructuredHTTPException):
+    content = {"code": exc.error_code, "message": exc.message}
+    if exc.details:
+        content["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 # Configure CORS
 origins = [
@@ -40,10 +59,6 @@ tool_map = {
     "list_files": file_service.list_files,
     "write_file": file_service.write_file,
 }
-
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
 
 app.include_router(api_router, prefix="/api")
 

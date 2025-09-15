@@ -1,14 +1,40 @@
 import os
 import math
+import logging
+import hashlib
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Query, HTTPException, Header, Request
+from fastapi import APIRouter, Query, HTTPException, Header, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.services import permission_service
 from app.config import get_feature_flags, get_config
+from app.database import get_db
+from app.crud.workspace import workspace_crud, permission_crud
+from app.schemas.workspace import (
+    WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse, WorkspaceListResponse,
+    PermissionCreate, PermissionUpdate, PermissionResponse, PermissionListResponse,
+    BatchEffectivePermissionsRequest, BatchEffectivePermissionsResponse, EffectivePermissionResult,
+    ErrorResponse, SuccessResponse
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Custom exceptions for structured error responses
+class StructuredHTTPException(Exception):
+    """Custom exception that returns structured error response."""
+    def __init__(self, status_code: int, error_code: str, message: str, details: dict = None):
+        self.status_code = status_code
+        self.error_code = error_code
+        self.message = message
+        self.details = details
+
+def create_error_response(status_code: int, error_code: str, message: str, details: dict = None):
+    """Create standardized error response."""
+    raise StructuredHTTPException(status_code, error_code, message, details)
 
 class FileItem(BaseModel):
     name: str
@@ -361,3 +387,414 @@ def get_permissions_stats():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get permission stats: {str(e)}")
+
+
+# ============================================================================
+# ETag utility functions for optimistic locking
+def generate_etag(obj_id: int, version: int) -> str:
+    """Generate ETag from object ID and version."""
+    data = f"{obj_id}:{version}"
+    return hashlib.md5(data.encode()).hexdigest()
+
+def validate_etag(obj_id: int, obj_version: int, provided_etag: str) -> bool:
+    """Validate that provided ETag matches current object state."""
+    expected_etag = generate_etag(obj_id, obj_version)
+    clean_provided = provided_etag.strip('"')
+    return clean_provided == expected_etag
+
+# PHASE 3A: Database-Driven Workspace & Permission Management APIs
+# ============================================================================
+
+def check_phase3_enabled():
+    """Check if Phase 3A features are enabled."""
+    feature_flags = get_feature_flags()
+    if not feature_flags.is_database_permissions_enabled():
+        raise HTTPException(
+            status_code=501,
+            detail="Database permissions are not enabled. Set ENABLE_DATABASE_PERMISSIONS=true"
+        )
+
+# Workspace Management APIs
+@router.post("/workspaces", response_model=WorkspaceResponse, status_code=201)
+def create_workspace(
+    workspace: WorkspaceCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new workspace.
+
+    The workspace will be created in an inactive state. Use the activate endpoint
+    to make it the active workspace for permission resolution.
+    """
+    check_phase3_enabled()
+
+    try:
+        db_workspace = workspace_crud.create_workspace(
+            db=db,
+            workspace=workspace,
+            created_by="api_user"  # TODO: Replace with actual user context
+        )
+        return db_workspace
+    except ValueError as e:
+        create_error_response(409, "WORKSPACE_CONFLICT", str(e))
+
+
+@router.get("/workspaces", response_model=WorkspaceListResponse)
+def list_workspaces(
+    skip: int = Query(0, ge=0, description="Number of workspaces to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of workspaces to return"),
+    db: Session = Depends(get_db)
+):
+    """
+    List all workspaces with pagination.
+
+    Returns workspaces ordered by creation date, with the currently active
+    workspace indicated in the response.
+    """
+    check_phase3_enabled()
+
+    try:
+        workspaces = workspace_crud.get_workspaces(db, skip=skip, limit=limit)
+        total = workspace_crud.get_workspaces_count(db)
+        active_workspace = workspace_crud.get_active_workspace(db)
+
+        return WorkspaceListResponse(
+            workspaces=workspaces,
+            total=total,
+            active_workspace_id=active_workspace.id if active_workspace else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list workspaces: {str(e)}")
+
+
+@router.get("/workspaces/{workspace_id}")
+def get_workspace(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a specific workspace by ID with ETag support."""
+    check_phase3_enabled()
+
+    workspace = workspace_crud.get_workspace(db, workspace_id)
+    if not workspace:
+        create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
+
+    # Generate ETag
+    etag = generate_etag(workspace.id, workspace.version)
+
+    return JSONResponse(
+        content=WorkspaceResponse.model_validate(workspace).model_dump(mode='json'),
+        headers={"ETag": f'"{etag}"'}
+    )
+
+
+@router.put("/workspaces/{workspace_id}")
+def update_workspace(
+    workspace_id: int,
+    workspace_update: WorkspaceUpdate,
+    if_match: Optional[str] = Header(None, alias="If-Match"),
+    db: Session = Depends(get_db)
+):
+    """Update a workspace with optimistic locking via ETag."""
+    check_phase3_enabled()
+
+    # Get current workspace for ETag validation
+    current_workspace = workspace_crud.get_workspace(db, workspace_id)
+    if not current_workspace:
+        create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
+
+    # Validate If-Match header if provided
+    if if_match:
+        if not validate_etag(current_workspace.id, current_workspace.version, if_match):
+            create_error_response(412, "ETAG_MISMATCH",
+                "Workspace has been modified by another process. Please refresh and try again.",
+                {"current_version": current_workspace.version})
+
+    try:
+        updated_workspace = workspace_crud.update_workspace(
+            db=db,
+            workspace_id=workspace_id,
+            workspace_update=workspace_update,
+            updated_by="api_user"  # TODO: Replace with actual user context
+        )
+
+        if not updated_workspace:
+            create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
+
+        # Generate new ETag for response
+        etag = generate_etag(updated_workspace.id, updated_workspace.version)
+
+        return JSONResponse(
+            content=WorkspaceResponse.model_validate(updated_workspace).model_dump(mode='json'),
+            headers={"ETag": f'"{etag}"'}
+        )
+    except ValueError as e:
+        create_error_response(409, "WORKSPACE_UPDATE_CONFLICT", str(e))
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=204)
+def delete_workspace(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a workspace and all its permissions.
+
+    WARNING: This operation cannot be undone. All permission rules
+    associated with this workspace will also be deleted.
+    """
+    check_phase3_enabled()
+
+    success = workspace_crud.delete_workspace(db, workspace_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Return 204 No Content
+
+
+@router.post("/workspaces/{workspace_id}/activate", response_model=WorkspaceResponse)
+def activate_workspace(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Activate a workspace, making it the current active workspace.
+
+    This will deactivate all other workspaces and make the specified workspace
+    the source of truth for permission resolution. Permission caches will be
+    invalidated and rebuilt.
+    """
+    check_phase3_enabled()
+
+    activated_workspace = workspace_crud.activate_workspace(db, workspace_id)
+    if not activated_workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Invalidate permission cache to force reload of new active workspace rules
+    try:
+        from app.services.database_permission_service import get_database_permission_service
+        service = get_database_permission_service()
+        service.invalidate_cache()
+        service.reload_rules(force=True)
+    except Exception as e:
+        logger.warning(f"Failed to invalidate permission cache: {e}")
+
+    return activated_workspace
+
+
+# Permission Management APIs
+@router.post("/workspaces/{workspace_id}/permissions", response_model=PermissionResponse, status_code=201)
+def create_permission(
+    workspace_id: int,
+    permission: PermissionCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new permission rule within a workspace.
+
+    The rule will be validated against the unique constraint to prevent
+    duplicate rules within the same workspace.
+    """
+    check_phase3_enabled()
+
+    try:
+        db_permission = permission_crud.create_permission(
+            db=db,
+            workspace_id=workspace_id,
+            permission=permission,
+            created_by="api_user"  # TODO: Replace with actual user context
+        )
+        return db_permission
+    except ValueError as e:
+        if "not found" in str(e):
+            create_error_response(404, "WORKSPACE_NOT_FOUND", str(e))
+        else:
+            create_error_response(409, "PERMISSION_CONFLICT", str(e))
+
+
+@router.get("/workspaces/{workspace_id}/permissions", response_model=PermissionListResponse)
+def list_workspace_permissions(
+    workspace_id: int,
+    skip: int = Query(0, ge=0, description="Number of permissions to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of permissions to return"),
+    db: Session = Depends(get_db)
+):
+    """List all permissions for a specific workspace with pagination."""
+    check_phase3_enabled()
+
+    # Verify workspace exists
+    workspace = workspace_crud.get_workspace(db, workspace_id)
+    if not workspace:
+        create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
+
+    try:
+        permissions = permission_crud.get_workspace_permissions(
+            db, workspace_id, skip=skip, limit=limit
+        )
+        total = permission_crud.get_workspace_permissions_count(db, workspace_id)
+
+        return PermissionListResponse(
+            permissions=permissions,
+            total=total,
+            workspace_id=workspace_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list permissions: {str(e)}")
+
+
+@router.get("/permissions/{permission_id}")
+def get_permission(
+    permission_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a specific permission by ID with ETag support."""
+    check_phase3_enabled()
+
+    permission = permission_crud.get_permission(db, permission_id)
+    if not permission:
+        create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
+    # Generate ETag
+    etag = generate_etag(permission.id, permission.version)
+
+    return JSONResponse(
+        content=PermissionResponse.model_validate(permission).model_dump(mode='json'),
+        headers={"ETag": f'"{etag}"'}
+    )
+
+
+@router.put("/permissions/{permission_id}")
+def update_permission(
+    permission_id: int,
+    permission_update: PermissionUpdate,
+    if_match: Optional[str] = Header(None, alias="If-Match"),
+    db: Session = Depends(get_db)
+):
+    """Update an existing permission rule with optimistic locking via ETag."""
+    check_phase3_enabled()
+
+    # Get current permission for ETag validation
+    current_permission = permission_crud.get_permission(db, permission_id)
+    if not current_permission:
+        create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
+    # Validate If-Match header if provided
+    if if_match:
+        if not validate_etag(current_permission.id, current_permission.version, if_match):
+            create_error_response(412, "ETAG_MISMATCH",
+                "Permission has been modified by another process. Please refresh and try again.",
+                {"current_version": current_permission.version})
+
+    try:
+        updated_permission = permission_crud.update_permission(
+            db=db,
+            permission_id=permission_id,
+            permission_update=permission_update,
+            updated_by="api_user"  # TODO: Replace with actual user context
+        )
+
+        if not updated_permission:
+            create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
+        # Generate new ETag for response
+        etag = generate_etag(updated_permission.id, updated_permission.version)
+
+        return JSONResponse(
+            content=PermissionResponse.model_validate(updated_permission).model_dump(mode='json'),
+            headers={"ETag": f'"{etag}"'}
+        )
+    except ValueError as e:
+        create_error_response(409, "PERMISSION_UPDATE_CONFLICT", str(e))
+
+
+@router.delete("/permissions/{permission_id}", status_code=204)
+def delete_permission(
+    permission_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a permission rule."""
+    check_phase3_enabled()
+
+    success = permission_crud.delete_permission(db, permission_id)
+    if not success:
+        create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
+    # Return 204 No Content
+
+
+# Batch Effective Permissions API (Cornerstone Feature)
+@router.post("/workspaces/{workspace_id}/effective-permissions:batch", response_model=BatchEffectivePermissionsResponse)
+def batch_effective_permissions(
+    workspace_id: int,
+    request: BatchEffectivePermissionsRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Batch endpoint for checking effective permissions on multiple paths.
+
+    This is the cornerstone API for Phase 3A, designed to efficiently provide
+    permission status and matched rule information for large numbers of paths.
+    The UI will use this endpoint to display permission indicators and explanations.
+
+    Performance target: < 500ms for 1000 paths
+    """
+    check_phase3_enabled()
+
+    # Verify workspace exists
+    workspace = workspace_crud.get_workspace(db, workspace_id)
+    if not workspace:
+        create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
+
+    # For inactive workspaces, return all denied results (no permissions apply)
+    if not workspace.is_active:
+        denied_results = [
+            EffectivePermissionResult(
+                path=path,
+                status="denied",
+                matched_rule=None
+            )
+            for path in request.paths
+        ]
+        return BatchEffectivePermissionsResponse(results=denied_results)
+
+    try:
+        # Use the database permission service for batch permission checking
+        from app.services.database_permission_service import get_database_permission_service
+
+        service = get_database_permission_service()
+        results = service.batch_check_permissions(request.paths, workspace_id)
+
+        return BatchEffectivePermissionsResponse(results=results)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
+
+
+# Active Workspace Permissions (Helper API)
+@router.get("/active-workspace/permissions", response_model=PermissionListResponse)
+def get_active_workspace_permissions(
+    db: Session = Depends(get_db)
+):
+    """
+    Get all permissions for the currently active workspace.
+
+    This is a convenience endpoint for getting the permission rules that are
+    currently being used for access control decisions.
+    """
+    check_phase3_enabled()
+
+    active_workspace = workspace_crud.get_active_workspace(db)
+    if not active_workspace:
+        create_error_response(404, "NO_ACTIVE_WORKSPACE", "No active workspace found")
+
+    try:
+        permissions = permission_crud.get_active_workspace_permissions(db)
+        total = len(permissions)
+
+        return PermissionListResponse(
+            permissions=permissions,
+            total=total,
+            workspace_id=active_workspace.id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get active workspace permissions: {str(e)}")

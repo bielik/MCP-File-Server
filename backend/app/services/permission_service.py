@@ -17,21 +17,31 @@ try:
         get_safe_path as config_get_safe_path,
         get_permission_service
     )
+    from app.services.database_permission_service import (
+        check_access as db_check_access,
+        get_safe_path as db_get_safe_path,
+        get_database_permission_service
+    )
     _HAS_CONFIG_SUPPORT = True
+    _HAS_DATABASE_SUPPORT = True
 except ImportError:
     _HAS_CONFIG_SUPPORT = False
+    _HAS_DATABASE_SUPPORT = False
 
 def get_safe_path(user_path: str) -> str:
     """
     Joins the user-provided path with the base shared directory and resolves it
     to an absolute path, preventing directory traversal.
 
-    Routes to config-based service if Phase 2 is enabled, otherwise uses legacy logic.
+    Routes to appropriate service based on feature flags.
     """
-    if _HAS_CONFIG_SUPPORT:
+    if _HAS_DATABASE_SUPPORT:
         feature_flags = get_feature_flags()
-        if feature_flags.is_config_permissions_enabled():
-            # Use new config-based service
+        if feature_flags.is_database_permissions_enabled():
+            # Use database-based service (Phase 3A)
+            return db_get_safe_path(user_path)
+        elif feature_flags.is_config_permissions_enabled():
+            # Use config-based service (Phase 2)
             return config_get_safe_path(user_path)
 
     # Legacy logic
@@ -57,12 +67,18 @@ def check_access(path: str, operation: str):
     Checks if a given operation ('read' or 'write') is allowed on a path.
     Raises PermissionError if access is denied.
 
-    Routes to config-based service if Phase 2 is enabled, otherwise uses legacy logic.
+    Routes to appropriate service based on feature flags.
     """
-    if _HAS_CONFIG_SUPPORT:
+    if _HAS_DATABASE_SUPPORT:
         feature_flags = get_feature_flags()
-        if feature_flags.is_config_permissions_enabled():
-            # Use new config-based service
+        if feature_flags.is_database_permissions_enabled():
+            # Use database-based service (Phase 3A)
+            is_allowed = db_check_access(path, operation)
+            if not is_allowed:
+                raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")
+            return True
+        elif feature_flags.is_config_permissions_enabled():
+            # Use config-based service (Phase 2)
             is_allowed = config_check_access(path, operation)
             if not is_allowed:
                 raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")

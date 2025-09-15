@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class SettingBase(BaseModel):
     key: str
@@ -10,5 +10,4 @@ class SettingCreate(SettingBase):
 class Setting(SettingBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

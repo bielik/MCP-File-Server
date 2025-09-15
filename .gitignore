@@ -152,3 +152,17 @@ docker-compose.yml.override
 # Custom
 .gpt/*
 .gpt/dump.txt
+
+# Development database - contains local data
+data/database.db
+
+# Simple test script (development only)
+backend/simple_test.py
+
+# Temporary test files
+test_*.json
+wrapped_*.json
+headers.txt
+
+# Test data files
+shared-fs/docs/test*.txt

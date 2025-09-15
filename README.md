@@ -1,7 +1,7 @@
 # MCP KnowledgeExplorer
 
-> **🎉 Status: Phase 2 Complete - Dynamic Config-Based Permission System!**
-> The MCP server now features a comprehensive config-file driven permission system with advanced caching, formal precedence logic, and a professional permission editor UI! Configure granular file access permissions through an intuitive interface or JSON editing. All Phase 2 features are fully implemented, tested, and operational.
+> **🎉 Status: Phase 3A Complete - Database-Driven Workspace System!**
+> The MCP server now features a complete database-driven workspace and permission system with comprehensive CRUD APIs, batch permission resolution, audit logging, and automated migration capabilities. Create and manage multiple workspaces, each with isolated permission contexts, through both API and UI interfaces. All Phase 3A features are fully implemented, thoroughly tested, and production-ready.
 
 ## Quick Start
 
@@ -18,18 +18,26 @@ docker-compose up
 # Connect to MCP from Claude Code
 claude mcp add --transport http wisdom http://localhost:8000/mcp
 
-# Test the connection (examples with actual directories)
-# List course materials directory
+# Quick Phase 3A Demo: Workspace Management
+curl -X POST http://localhost:8000/api/workspaces \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Demo Workspace", "description": "Testing Phase 3A", "is_active": true}'
+
+curl -X POST http://localhost:8000/api/workspaces/1/permissions \
+  -H "Content-Type: application/json" \
+  -d '{"path": "materials", "permission_type": "read", "rule_type": "allow", "description": "Allow read access to materials"}'
+
+# Test batch permission resolution (cornerstone API for UI)
+curl -X POST http://localhost:8000/api/workspaces/1/effective-permissions:batch \
+  -H "Content-Type: application/json" \
+  -d '{"paths": ["/materials/docs", "/projects/app", "/private/secret"]}'
+
+# Test the MCP connection with the workspace permissions
 curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "list_files", "arguments": {"path": "materials"}}, "id": 1}'
 
-# Read a file from the materials directory
-curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "read_file", "arguments": {"path": "materials/Hallo.txt"}}, "id": 2}'
-
-# Try to access blocked directory (should return Permission Denied)
-curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "list_files", "arguments": {"path": "materials/01_Introduction to Software Engineering"}}, "id": 3}'
+# Migrate existing Phase 2 config to database
+python -m backend.app.scripts.migrate_config_to_db --workspace-name "Legacy Config" --activate --dry-run
 ```
 
 ---
@@ -40,14 +48,22 @@ curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
 
 This project is a **production-ready Model Context Protocol (MCP) server** that enables AI agents to safely interact with your local file system. It provides HTTP endpoints for AI client connections and WebSocket for internal communication, along with a web-based management interface for real-time monitoring and granular permission control.
 
-### 1.2. Current Status - ✅ Phase 2 Complete: Dynamic Config-Based Permission System
+### 1.2. Current Status - ✅ Phase 3A Complete: Database-Driven Workspace System
 
 **✅ Fully Implemented and Tested:**
 - **MCP Protocol**: Complete JSON-RPC 2.0 implementation with MCP 2024-11-05 specification
 - **File System Tools**: `read_file`, `list_files`, `write_file` with integrated security
-- **🆕 Config Permission System**: JSON-based permission rules with formal precedence logic
-- **🆕 Trie-Based Caching**: High-performance in-memory permission resolution
-- **🆕 Permission Editor UI**: Visual and JSON editor with rule ID display and atomic updates
+- **🆕 Database Schema**: Full `Workspace` and `Permission` SQLAlchemy models with constraints
+- **🆕 Workspace Management**: Complete CRUD APIs for workspace creation, activation, and management
+- **🆕 Permission Management**: Comprehensive permission CRUD with workspace context and validation
+- **🆕 Batch Permission API**: High-performance `POST /api/workspaces/{id}/effective-permissions:batch` endpoint
+- **🆕 Database Permission Service**: New service with preserved Trie-based caching performance
+- **🆕 Audit Logging**: Comprehensive structured audit events for all permission decisions
+- **🆕 Migration Tools**: Complete, idempotent migration script from config files to database
+- **🆕 Comprehensive Test Suite**: Full Phase 3A test coverage with performance validation
+- **Config Permission System**: JSON-based permission rules (maintained for backward compatibility)
+- **Trie-Based Caching**: High-performance in-memory permission resolution (enhanced for database)
+- **Permission Editor UI**: Visual and JSON editor (Phase 2, Phase 3B will enhance for workspaces)
 - **🆕 File Watcher Integration**: Automatic config reload when permissions.json changes
 - **🆕 Feature Flags**: Safe deployment with Phase 2/3 toggles (`ENABLE_CONFIG_FILE_PERMISSIONS=true`)
 - **🆕 Bug Fixes Complete**: Permission persistence, frontend integration, rule ID display all working
@@ -60,11 +76,11 @@ This project is a **production-ready Model Context Protocol (MCP) server** that 
 - **Secure Browse API**: `/api/browse` with directory traversal prevention
 - **Enhanced UI**: Tabbed interface with permission legend and activity sidebar
 
-**🚧 Next Phase (Phase 3):**
-- **Database Permissions**: Move permissions from JSON to SQLite with versioning
-- **User Management**: Multi-user contexts with role-based access
-- **API Authentication**: Secure MCP server access with client keys
-- **Audit Logging**: Track permission changes and access attempts
+**🚧 Next Phase (Phase 3B - Advanced Workspace UI):**
+- **Workspace UI Components**: Create, delete, and activate workspaces from the UI
+- **Two-Panel Permission Editor**: Full visual workspace permission management
+- **"Inspect Permission" Feature**: Detailed permission explanations with matched rule info
+- **Real-time Workspace Switching**: Dynamic UI updates when workspace context changes
 
 ### 1.3. Scope
 
@@ -715,9 +731,9 @@ FRONTEND_PORT=5173                       # Vite development server
 DATABASE_PATH=./data                     # SQLite database directory
 SHARED_FS_PATH=C:/Users/MartinBielik/MCP Test  # Actual shared filesystem
 
-# Phase 2 Feature Flags
-ENABLE_CONFIG_FILE_PERMISSIONS=true     # Enable config-file permissions
-ENABLE_DATABASE_PERMISSIONS=false       # Future Phase 3 feature
+# Phase 2/3 Feature Flags
+ENABLE_CONFIG_FILE_PERMISSIONS=true     # Phase 2 config-file permissions (maintained for compatibility)
+ENABLE_DATABASE_PERMISSIONS=true        # Phase 3A database permissions (production-ready)
 
 # Performance Settings
 PERMISSION_CACHE_TTL=300                 # Cache TTL in seconds
@@ -835,12 +851,19 @@ curl -X POST http://localhost:8000/mcp \
 - [x] Bug fixes: Permission persistence, frontend integration, rule ID display
 - [x] Full integration testing with real filesystem
 
-### 🚧 Phase 3: Database-Driven Permissions (IN PREPARATION)
-- [ ] SQLite schema for permission storage
-- [ ] User management and role-based access
-- [ ] API key authentication for MCP clients
-- [ ] Audit logging for compliance
-- [ ] Permission versioning and rollback
+### ✅ Phase 3A: Database-Driven Permissions (COMPLETE)
+- [x] SQLite schema for workspace and permission storage
+- [x] Complete Workspace and Permission CRUD APIs
+- [x] Batch effective permissions API for UI integration
+- [x] Database permission service with preserved Trie caching
+- [x] Comprehensive audit logging for all permission decisions
+- [x] Migration script for config-to-database transition
+
+### 🚧 Phase 3B: Advanced Workspace UI (IN PROGRESS)
+- [ ] Workspace management UI components
+- [ ] Two-panel permission editor with batch API
+- [ ] "Inspect Permission" tooltip/modal feature
+- [ ] Real-time workspace context switching
 
 ### 📋 Phase 4: Advanced Features (PLANNED)
 - [ ] File system search capabilities (keyword + semantic)
