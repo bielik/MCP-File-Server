@@ -192,12 +192,16 @@ class EffectivePermissionResult(BaseModel):
     """Result for a single path in batch effective permissions."""
     path: str = Field(..., description="The path that was checked")
     status: str = Field(..., description="Permission status: 'read', 'write', 'denied'")
-    matched_rule: Optional[MatchedRuleInfo] = Field(None, description="Information about the matching rule (null for denied)")
+    matched_rule: Optional[MatchedRuleInfo] = Field(None, alias="matchedRule", description="Information about the matching rule (null for denied)")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=None, ser_json_encoder=None)
 
 
 class BatchEffectivePermissionsResponse(BaseModel):
     """Schema for batch effective permissions response."""
     results: List[EffectivePermissionResult] = Field(..., description="Permission results for each path")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # Workspace list response

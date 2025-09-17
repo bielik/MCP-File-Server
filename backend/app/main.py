@@ -5,6 +5,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from app.database import create_db_and_tables
 from app.api.endpoints import router as api_router
@@ -197,16 +201,26 @@ def mcp_endpoint_info():
 
 @app.websocket("/ws/ui")
 async def websocket_ui_endpoint(websocket: WebSocket):
-    await ui_manager.connect(websocket)
+    import sys
+    print(f"[UI] WebSocket connection attempt from {websocket.client}", flush=True, file=sys.stderr)
+    print(f"[UI] Headers: {dict(websocket.headers)}", flush=True, file=sys.stderr)
+
     try:
+        await ui_manager.connect(websocket)
+        print(f"[UI] WebSocket connected successfully", flush=True, file=sys.stderr)
+
         while True:
             # The UI websocket is primarily for receiving data
             data = await websocket.receive_text()
-            # For now, we can just echo back or log
-            await ui_manager.send_personal_message(f"Echo from UI: {data}", websocket)
+            print(f"[UI] Received message: {data}", flush=True, file=sys.stderr)
+            # Don't echo back - just log the message
+            # UI websocket is mainly for receiving broadcasts, not echoing
     except WebSocketDisconnect:
         ui_manager.disconnect(websocket)
-        print("UI Client disconnected")
+        print("[UI] Client disconnected", flush=True, file=sys.stderr)
+    except Exception as e:
+        print(f"[UI] WebSocket error: {e}", flush=True, file=sys.stderr)
+        ui_manager.disconnect(websocket)
 
 
 async def send_mcp_error(websocket: WebSocket, error: mcp_schemas.JsonRpcError, request_id: int | str | None = None):
