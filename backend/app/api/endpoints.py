@@ -2,6 +2,8 @@ import os
 import math
 import logging
 import hashlib
+import json
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Query, HTTPException, Header, Request, Depends
 from fastapi.responses import JSONResponse
@@ -545,6 +547,15 @@ def delete_workspace(
     """
     check_phase3_enabled()
 
+    # Check if workspace exists and is active
+    workspace = workspace_crud.get_workspace(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Prevent deletion of active workspace
+    if workspace.is_active:
+        raise HTTPException(status_code=400, detail="Cannot delete active workspace. Deactivate it first.")
+
     success = workspace_crud.delete_workspace(db, workspace_id)
     if not success:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -553,7 +564,7 @@ def delete_workspace(
 
 
 @router.post("/workspaces/{workspace_id}/activate", response_model=WorkspaceResponse)
-def activate_workspace(
+async def activate_workspace(
     workspace_id: int,
     db: Session = Depends(get_db)
 ):
@@ -566,9 +577,24 @@ def activate_workspace(
     """
     check_phase3_enabled()
 
+    # Get the workspace before activation for WebSocket event
+    old_active_workspace = workspace_crud.get_active_workspace(db)
+    old_workspace_data = None
+    if old_active_workspace:
+        old_workspace_data = {
+            "id": old_active_workspace.id,
+            "name": old_active_workspace.name
+        }
+
     activated_workspace = workspace_crud.activate_workspace(db, workspace_id)
     if not activated_workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Extract data we need for WebSocket events before session closes
+    activated_workspace_data = {
+        "id": activated_workspace.id,
+        "name": activated_workspace.name
+    }
 
     # Invalidate permission cache to force reload of new active workspace rules
     try:
@@ -579,12 +605,51 @@ def activate_workspace(
     except Exception as e:
         logger.warning(f"Failed to invalidate permission cache: {e}")
 
+    # Broadcast WebSocket events for real-time UI updates
+    try:
+        # Import ui_manager from main.py
+        import sys
+        import importlib
+        main_module = sys.modules.get('app.main')
+        if main_module and hasattr(main_module, 'ui_manager'):
+            ui_manager = main_module.ui_manager
+
+            # Send workspace deactivation event if there was a previous active workspace
+            if old_workspace_data and old_workspace_data["id"] != workspace_id:
+                deactivation_event = {
+                    "event": "workspace_deactivated",
+                    "workspace_id": old_workspace_data["id"],
+                    "workspace_name": old_workspace_data["name"],
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                await ui_manager.broadcast(json.dumps(deactivation_event))
+
+            # Send workspace activation event
+            activation_event = {
+                "event": "workspace_activated",
+                "workspace_id": activated_workspace_data["id"],
+                "workspace_name": activated_workspace_data["name"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await ui_manager.broadcast(json.dumps(activation_event))
+
+            # Send cache invalidation event
+            cache_event = {
+                "event": "permission_cache_invalidated",
+                "workspace_id": workspace_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await ui_manager.broadcast(json.dumps(cache_event))
+
+    except Exception as e:
+        logger.warning(f"Failed to broadcast WebSocket events: {e}")
+
     return activated_workspace
 
 
 # Permission Management APIs
 @router.post("/workspaces/{workspace_id}/permissions", response_model=PermissionResponse, status_code=201)
-def create_permission(
+async def create_permission(
     workspace_id: int,
     permission: PermissionCreate,
     db: Session = Depends(get_db)
@@ -604,6 +669,35 @@ def create_permission(
             permission=permission,
             created_by="api_user"  # TODO: Replace with actual user context
         )
+
+        # Broadcast WebSocket event for permission creation
+        try:
+            import sys
+            main_module = sys.modules.get('app.main')
+            if main_module and hasattr(main_module, 'ui_manager'):
+                ui_manager = main_module.ui_manager
+
+                permission_event = {
+                    "event": "permission_created",
+                    "workspace_id": workspace_id,
+                    "permission_id": db_permission.id,
+                    "path": db_permission.path,
+                    "permission_type": db_permission.permission_type,
+                    "rule_type": db_permission.rule_type,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                await ui_manager.broadcast(json.dumps(permission_event))
+        except Exception as e:
+            logger.warning(f"Failed to broadcast permission creation event: {e}")
+
+        # Invalidate permission cache so new rules are loaded
+        try:
+            from app.services.database_permission_service import get_database_permission_service
+            service = get_database_permission_service()
+            service.invalidate_cache(workspace_id)
+        except Exception as e:
+            logger.warning(f"Failed to invalidate permission cache: {e}")
+
         return db_permission
     except ValueError as e:
         if "not found" in str(e):
@@ -708,22 +802,53 @@ def update_permission(
 
 
 @router.delete("/permissions/{permission_id}", status_code=204)
-def delete_permission(
+async def delete_permission(
     permission_id: int,
     db: Session = Depends(get_db)
 ):
     """Delete a permission rule."""
     check_phase3_enabled()
 
+    # Get permission info before deletion for broadcasting
+    permission = permission_crud.get_permission(db, permission_id)
+    if not permission:
+        create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
     success = permission_crud.delete_permission(db, permission_id)
     if not success:
         create_error_response(404, "PERMISSION_NOT_FOUND", "Permission not found")
+
+    # Broadcast WebSocket event for permission deletion
+    try:
+        import sys
+        main_module = sys.modules.get('app.main')
+        if main_module and hasattr(main_module, 'ui_manager'):
+            ui_manager = main_module.ui_manager
+
+            permission_event = {
+                "event": "permission_deleted",
+                "workspace_id": permission.workspace_id,
+                "permission_id": permission_id,
+                "path": permission.path,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await ui_manager.broadcast(json.dumps(permission_event))
+    except Exception as e:
+        logger.warning(f"Failed to broadcast permission deletion event: {e}")
+
+    # Invalidate permission cache so deleted rules are removed
+    try:
+        from app.services.database_permission_service import get_database_permission_service
+        service = get_database_permission_service()
+        service.invalidate_cache(permission.workspace_id)
+    except Exception as e:
+        logger.warning(f"Failed to invalidate permission cache: {e}")
 
     # Return 204 No Content
 
 
 # Batch Effective Permissions API (Cornerstone Feature)
-@router.post("/workspaces/{workspace_id}/effective-permissions:batch", response_model=BatchEffectivePermissionsResponse)
+@router.post("/workspaces/{workspace_id}/effective-permissions:batch", response_model=BatchEffectivePermissionsResponse, response_model_by_alias=True)
 def batch_effective_permissions(
     workspace_id: int,
     request: BatchEffectivePermissionsRequest,
@@ -745,17 +870,17 @@ def batch_effective_permissions(
     if not workspace:
         create_error_response(404, "WORKSPACE_NOT_FOUND", "Workspace not found")
 
-    # For inactive workspaces, return all denied results (no permissions apply)
+    # For inactive workspaces, return all none results (no permissions apply)
     if not workspace.is_active:
-        denied_results = [
+        none_results = [
             EffectivePermissionResult(
                 path=path,
-                status="denied",
+                status="none",
                 matched_rule=None
             )
             for path in request.paths
         ]
-        return BatchEffectivePermissionsResponse(results=denied_results)
+        return BatchEffectivePermissionsResponse(results=none_results)
 
     try:
         # Use the database permission service for batch permission checking

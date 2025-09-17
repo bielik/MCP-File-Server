@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
 import FileExplorer from './components/FileExplorer';
 import { PermissionIndicator, PermissionLegend } from './components/PermissionIndicator';
+import WorkspaceManager from './components/WorkspaceManager';
+import TwoPanelPermissionEditor from './components/TwoPanelPermissionEditor';
 import Settings from './pages/Settings';
+import { useWebSocketContext } from './contexts/WebSocketContext';
+import { useWorkspaceStore, useActiveWorkspaceId } from './store/workspaceStore';
 
 function App() {
   const [config, setConfig] = useState<any>(null);
-  const [status, setStatus] = useState('Connecting...');
-  const [logs, setLogs] = useState<string[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'explorer' | 'status' | 'settings'>('explorer');
+  const [activeTab, setActiveTab] = useState<'explorer' | 'workspaces' | 'permissions' | 'status' | 'settings'>('workspaces');
+
+  // Use WebSocket context
+  const { isConnected, logs, clearLogs, error: wsError } = useWebSocketContext();
+
+  // Get workspace state
+  const { activeWorkspace, fetchWorkspaces } = useWorkspaceStore();
+  const activeWorkspaceId = useActiveWorkspaceId();
 
   useEffect(() => {
     // This flag helps prevent issues with React 18's StrictMode double-invoking effects.
@@ -24,46 +33,16 @@ function App() {
       })
       .catch(err => {
         console.error("Failed to fetch config:", err);
-        if (!ignore) {
-            setStatus("Failed to connect to backend API.");
-        }
       });
 
-    // Establish WebSocket connection for UI logs
-    const ws = new WebSocket('ws://localhost:8000/ws/ui');
-
-    ws.onopen = () => {
-      if (!ignore) {
-        setStatus('Connected to backend WebSocket.');
-        ws.send("Hello from UI!");
-      }
-    };
-
-    ws.onmessage = (event) => {
-        if (!ignore) {
-            setLogs(prevLogs => [...prevLogs, event.data]);
-        }
-    };
-
-    ws.onclose = () => {
-        if (!ignore) {
-            setStatus('WebSocket connection closed.');
-        }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      if (!ignore) {
-          setStatus('WebSocket connection error.');
-      }
-    };
+    // Fetch workspaces on mount
+    fetchWorkspaces();
 
     // Cleanup on component unmount
     return () => {
       ignore = true;
-      ws.close();
     };
-  }, []);
+  }, [fetchWorkspaces]);
 
   const handlePathChange = (newPath: string) => {
     setCurrentPath(newPath);
@@ -78,6 +57,28 @@ function App() {
 
           {/* Tab Navigation */}
           <div className="flex space-x-1 bg-gray-800 p-1 rounded-lg w-fit">
+            <button
+              onClick={() => setActiveTab('workspaces')}
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                activeTab === 'workspaces'
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              🏠 Workspaces
+            </button>
+            {activeWorkspace && (
+              <button
+                onClick={() => setActiveTab('permissions')}
+                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  activeTab === 'permissions'
+                    ? 'bg-cyan-600 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                🔐 Permissions
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('explorer')}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
@@ -109,7 +110,24 @@ function App() {
               ⚙️ Settings
             </button>
           </div>
+
+          {/* Active Workspace Info */}
+          {activeWorkspace && (
+            <div className="mt-3 text-sm text-gray-400">
+              Active workspace: <span className="text-cyan-400 font-medium">{activeWorkspace.name}</span>
+            </div>
+          )}
         </div>
+
+        {activeTab === 'workspaces' && (
+          <WorkspaceManager />
+        )}
+
+        {activeTab === 'permissions' && activeWorkspaceId && (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '70vh' }}>
+            <TwoPanelPermissionEditor workspaceId={activeWorkspaceId} />
+          </div>
+        )}
 
         {activeTab === 'explorer' && (
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -155,11 +173,25 @@ function App() {
               {/* Connection Status */}
               <div className="bg-gray-800 p-4 rounded-lg">
                 <h3 className="text-sm font-semibold text-gray-300 mb-2">Connection</h3>
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    status.includes('Connected') ? 'bg-green-400' : 'bg-red-400'
-                  }`}></div>
-                  <span className="text-xs text-gray-400">{status}</span>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      isConnected ? 'bg-green-400' : 'bg-red-400'
+                    }`}></div>
+                    <span className="text-xs text-gray-400">
+                      WebSocket: {isConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                  {wsError && (
+                    <div className="text-xs text-red-400">
+                      Error: {wsError}
+                    </div>
+                  )}
+                  {activeWorkspace && (
+                    <div className="text-xs text-cyan-400">
+                      Workspace: {activeWorkspace.name}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -174,12 +206,27 @@ function App() {
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <div className={`w-3 h-3 rounded-full ${
-                    status.includes('Connected') ? 'bg-green-400' : 'bg-red-400'
+                    isConnected ? 'bg-green-400' : 'bg-red-400'
                   }`}></div>
                   <span className="text-sm">
-                    <span className="font-bold text-gray-300">WebSocket:</span> {status}
+                    <span className="font-bold text-gray-300">WebSocket:</span> {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
+
+                {wsError && (
+                  <div className="text-red-400 text-sm">
+                    <span className="font-bold">Error:</span> {wsError}
+                  </div>
+                )}
+
+                {activeWorkspace && (
+                  <div className="text-cyan-400 text-sm">
+                    <span className="font-bold text-gray-300">Active Workspace:</span> {activeWorkspace.name}
+                    <div className="text-xs text-gray-400 mt-1">
+                      ID: {activeWorkspace.id} • Created: {new Date(activeWorkspace.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-4">
                   <h3 className="text-lg font-semibold text-gray-300 mb-3">Server Configuration</h3>
@@ -213,7 +260,7 @@ function App() {
                 <div className="mt-3 flex justify-between items-center text-xs text-gray-400">
                   <span>Scroll to see all events</span>
                   <button
-                    onClick={() => setLogs([])}
+                    onClick={clearLogs}
                     className="text-red-400 hover:text-red-300 transition-colors"
                   >
                     Clear Log
