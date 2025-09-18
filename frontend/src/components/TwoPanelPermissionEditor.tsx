@@ -24,9 +24,10 @@ interface FileTreeProps {
   selectedPaths: Set<string>
   expandedPaths: Set<string>
   permissionResults: Map<string, EffectivePermissionResult>
+  loadingPaths: Set<string>
 }
 
-function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPaths, permissionResults }: FileTreeProps) {
+function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPaths, permissionResults, loadingPaths }: FileTreeProps) {
   const renderNode = (node: FileTreeNode, depth = 0) => {
     const isSelected = selectedPaths.has(node.path)
     const isExpanded = expandedPaths.has(node.path)
@@ -36,11 +37,10 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
     return (
       <div key={node.path}>
         <div
-          className={`flex items-center space-x-2 py-1 px-2 hover:bg-gray-100 cursor-pointer ${
+          className={`flex items-center space-x-2 py-1 px-2 ${
             isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : ''
           }`}
           style={{ paddingLeft: `${depth * 20 + 8}px` }}
-          onClick={() => onNodeSelect(node.path, !isSelected)}
         >
           {/* Expand/Collapse Button */}
           {node.isDirectory && (
@@ -49,23 +49,22 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
                 e.stopPropagation()
                 onNodeExpand(node.path)
               }}
-              className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-gray-700"
+              className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+              aria-label={isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
             >
-              {hasChildren ? (
-                isExpanded ? (
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                ) : (
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                )
-              ) : null}
+              {isExpanded ? (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
             </button>
           )}
 
-          {/* Checkbox */}
+          {/* Checkbox for selection */}
           <input
             type="checkbox"
             checked={isSelected}
@@ -74,21 +73,37 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
             onClick={(e) => e.stopPropagation()}
           />
 
-          {/* File/Folder Icon */}
-          <div className="text-gray-500">
-            {node.isDirectory ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            )}
+          {/* File/Folder Icon and Name - clickable for folders */}
+          <div
+            className={`flex items-center space-x-2 flex-1 ${
+              node.isDirectory ? 'cursor-pointer hover:bg-gray-50 rounded px-1' : ''
+            }`}
+            onClick={() => node.isDirectory ? onNodeExpand(node.path) : undefined}
+          >
+            {/* Icon */}
+            <div className="text-gray-500">
+              {node.isDirectory ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              )}
+            </div>
+
+            {/* Name */}
+            <span className="flex-1 text-sm text-gray-900 truncate">{node.name}</span>
           </div>
 
-          {/* File/Folder Name */}
-          <span className="flex-1 text-sm text-gray-900 truncate">{node.name}</span>
+          {/* Loading Indicator */}
+          {loadingPaths.has(node.path) && (
+            <div className="flex items-center space-x-1">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500"></div>
+              <span className="text-gray-400 text-xs">Loading...</span>
+            </div>
+          )}
 
           {/* Permission Indicator */}
           {permissionResult && (
@@ -301,6 +316,9 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
   const [permissionResults, setPermissionResults] = useState<Map<string, EffectivePermissionResult>>(new Map())
   const [showAddModal, setShowAddModal] = useState(false)
   const [loadingPermissions, setLoadingPermissions] = useState(false)
+  // Node caching for dynamic loading
+  const [nodeCache, setNodeCache] = useState<Map<string, FileTreeNode[]>>(new Map())
+  const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
 
   // Fetch initial data
   useEffect(() => {
@@ -308,12 +326,60 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
     loadFileTree()
   }, [workspaceId, fetchPermissions])
 
-  // Load file tree from API
+  // Load folder contents dynamically
+  const loadFolderContents = async (folderPath: string): Promise<FileTreeNode[]> => {
+    // Check cache first
+    if (nodeCache.has(folderPath)) {
+      return nodeCache.get(folderPath)!
+    }
+
+    // Mark as loading
+    setLoadingPaths(prev => new Set(prev).add(folderPath))
+
+    try {
+      const response = await fileApi.browseFiles(folderPath, 1, 1000, 1)
+      const children = response.files.map(file => ({
+        path: file.path,
+        name: file.name,
+        isDirectory: file.is_directory,
+        children: file.is_directory ? [] : undefined,
+        expanded: expandedPaths.has(file.path),
+        selected: selectedPaths.has(file.path)
+      }))
+
+      // Update cache
+      setNodeCache(prev => new Map(prev).set(folderPath, children))
+
+      // Update tree structure
+      updateTreeWithChildren(folderPath, children)
+
+      return children
+    } finally {
+      setLoadingPaths(prev => {
+        const next = new Set(prev)
+        next.delete(folderPath)
+        return next
+      })
+    }
+  }
+
+  // Load file tree from API (initial load only)
   const loadFileTree = async () => {
     try {
-      const response = await fileApi.browseFiles('', 1, 1000, 3)
+      const response = await fileApi.browseFiles('', 1, 1000, 1)
       const tree = buildFileTree(response.files)
       setFileTree(tree)
+
+      // Cache root level
+      const rootChildren = response.files.map(file => ({
+        path: file.path,
+        name: file.name,
+        isDirectory: file.is_directory,
+        children: file.is_directory ? [] : undefined,
+        expanded: expandedPaths.has(file.path),
+        selected: selectedPaths.has(file.path)
+      }))
+      setNodeCache(prev => new Map(prev).set('', rootChildren))
 
       // Get effective permissions for all visible paths
       await updatePermissionResults(tree)
@@ -370,6 +436,36 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
     return roots
   }
 
+  // Update tree with children for incremental loading
+  const updateTreeWithChildren = (parentPath: string, children: FileTreeNode[]) => {
+    setFileTree(prevTree => {
+      const newTree = [...prevTree]
+
+      const findAndUpdate = (nodes: FileTreeNode[]): boolean => {
+        for (const node of nodes) {
+          if (node.path === parentPath) {
+            node.children = children.map(child => ({
+              path: child.path,
+              name: child.name,
+              isDirectory: child.isDirectory,
+              children: child.isDirectory ? [] : undefined,
+              expanded: expandedPaths.has(child.path),
+              selected: selectedPaths.has(child.path)
+            }))
+            return true
+          }
+          if (node.children && findAndUpdate(node.children)) {
+            return true
+          }
+        }
+        return false
+      }
+
+      findAndUpdate(newTree)
+      return newTree
+    })
+  }
+
   // Collect all visible paths from file tree
   const collectVisiblePaths = useCallback((nodes: FileTreeNode[], paths: string[] = []): string[] => {
     nodes.forEach(node => {
@@ -413,17 +509,24 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
   }
 
   // Handle file tree node expansion
-  const handleNodeExpand = (path: string) => {
+  const handleNodeExpand = async (path: string) => {
     const newExpanded = new Set(expandedPaths)
+
     if (newExpanded.has(path)) {
+      // Collapse
       newExpanded.delete(path)
     } else {
+      // Expand and load children if needed
       newExpanded.add(path)
+
+      // Load children for this specific path
+      await loadFolderContents(path)
     }
+
     setExpandedPaths(newExpanded)
 
-    // Reload file tree to get children and update permissions
-    loadFileTree()
+    // Update permissions for newly visible nodes
+    await updatePermissionResults(fileTree)
   }
 
   // Handle adding new permission
@@ -476,6 +579,7 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
               selectedPaths={selectedPaths}
               expandedPaths={expandedPaths}
               permissionResults={permissionResults}
+              loadingPaths={loadingPaths}
             />
           ) : (
             <div className="text-center text-gray-500 py-8">

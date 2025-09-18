@@ -53,7 +53,7 @@ class BrowseResponse(BaseModel):
     page_size: int
     total_pages: int
 
-def normalize_and_validate_path(path: str, base_path: str = "/shared-fs") -> str:
+def normalize_and_validate_path(path: str, base_path: str = "/source") -> str:
     """
     Normalize and validate a path to prevent directory traversal attacks.
     Returns the absolute path within the base directory.
