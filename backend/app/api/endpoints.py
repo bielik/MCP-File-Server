@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.services import permission_service
 from app.config import get_feature_flags, get_config
 from app.database import get_db
+from app.api.system import router as system_router
 from app.crud.workspace import workspace_crud, permission_crud
 from app.schemas.workspace import (
     WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse, WorkspaceListResponse,
@@ -923,3 +924,7 @@ def get_active_workspace_permissions(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get active workspace permissions: {str(e)}")
+
+
+# Include additional routers
+router.include_router(system_router)

@@ -29,6 +29,15 @@ class FeatureFlags:
             "ENABLE_DATABASE_PERMISSIONS", False
         )
 
+        # Phase 4 feature flags (migration & deprecation)
+        self.ENABLE_SOURCE_MOUNT = self._get_bool_env(
+            "ENABLE_SOURCE_MOUNT", False
+        )
+
+        self.SHOW_DEPRECATION_WARNING = self._get_bool_env(
+            "SHOW_DEPRECATION_WARNING", True
+        )
+
         # Development and debugging flags
         self.DEBUG_PERMISSION_CACHE = self._get_bool_env(
             "DEBUG_PERMISSION_CACHE", False
@@ -58,6 +67,8 @@ class FeatureFlags:
         return {
             "ENABLE_CONFIG_FILE_PERMISSIONS": self.ENABLE_CONFIG_FILE_PERMISSIONS,
             "ENABLE_DATABASE_PERMISSIONS": self.ENABLE_DATABASE_PERMISSIONS,
+            "ENABLE_SOURCE_MOUNT": self.ENABLE_SOURCE_MOUNT,
+            "SHOW_DEPRECATION_WARNING": self.SHOW_DEPRECATION_WARNING,
             "DEBUG_PERMISSION_CACHE": self.DEBUG_PERMISSION_CACHE,
             "ENABLE_PERFORMANCE_METRICS": self.ENABLE_PERFORMANCE_METRICS,
         }
@@ -76,7 +87,8 @@ class Config:
         self.BASE_DIR = Path(__file__).parent.parent.parent
         self.CONFIG_DIR = self.BASE_DIR / "config"
         self.DATA_DIR = self.BASE_DIR / "data"
-        self.SHARED_FS_PATH = "/shared-fs"
+        self.SHARED_FS_PATH = "/shared-fs"  # Legacy mount point
+        self.SOURCE_MOUNT_PATH = "/source"   # New primary mount point
 
         # Permission configuration
         self.PERMISSIONS_CONFIG_FILE = self.CONFIG_DIR / "permissions.json"
@@ -125,6 +137,7 @@ class Config:
             "config_dir": str(self.CONFIG_DIR),
             "data_dir": str(self.DATA_DIR),
             "shared_fs_path": self.SHARED_FS_PATH,
+            "source_mount_path": self.SOURCE_MOUNT_PATH,
             "permissions_config_file": str(self.PERMISSIONS_CONFIG_FILE),
             "backend_port": self.BACKEND_PORT,
             "frontend_port": self.FRONTEND_PORT,

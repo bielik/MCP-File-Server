@@ -43,6 +43,8 @@ origins = [
     f"http://localhost",
     f"http://localhost:{os.getenv('FRONTEND_PORT', 5173)}",
     f"http://127.0.0.1:{os.getenv('FRONTEND_PORT', 5173)}",
+    "http://localhost:5175",  # Additional port for development
+    "http://127.0.0.1:5175",  # Additional port for development
 ]
 
 app.add_middleware(

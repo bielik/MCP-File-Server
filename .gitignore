@@ -156,6 +156,14 @@ docker-compose.yml.override
 # Development database - contains local data
 data/database.db
 
+# Test databases
+backend/*.db
+backend/test_*.db
+backend/debug_*.db
+
+# Personal settings
+.claude/settings.local.json
+
 # Simple test script (development only)
 backend/simple_test.py
 
@@ -166,3 +174,7 @@ headers.txt
 
 # Test data files
 shared-fs/docs/test*.txt
+
+# Development artifacts
+PHASE4_IMPLEMENTATION_PLAN.md
+PHASE4_TESTING_STRATEGY.md
