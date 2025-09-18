@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2025-01-18 - Legacy Mount Point Removal & System Simplification
+
+### 🧹 Major Cleanup - Legacy `/shared-fs` Mount Point Removal
+- **✅ SYSTEM SIMPLIFICATION COMPLETE**: Removed dual mount point complexity by eliminating legacy `/shared-fs` support
+- **🔧 Single Mount Architecture**: System now uses only `/source` mount point for all file operations
+- **🎨 UI Cleanup**: Removed confusing deprecation warnings and simplified user interface
+
+### 🗄️ Infrastructure Changes
+- **🐳 Docker Configuration Simplified**
+  - Removed legacy `/shared-fs` volume mount from `docker-compose.yml`
+  - Single mount point: `${SHARED_FS_PATH}:/source` (primary mount)
+  - Eliminates dual mount confusion and reduces container complexity
+
+### 🔧 Backend Path Resolution Updates
+- **📁 File Service Updated**: Changed `SHARED_FS_PATH` from `/shared-fs` to `/source` in `file_service.py`
+- **🔐 Permission Service Updated**: Updated `SHARED_FS_PATH` reference in `permission_service.py`
+- **🗂️ Path Resolver Simplified**: Removed dual mount logic from `path_resolver.py`
+  - Simplified class description to focus on single `/source` mount
+  - Removed legacy mount detection and feature flag dependencies
+  - Streamlined PathResolver initialization to use only primary mount
+
+### 🎨 Frontend Cleanup
+- **⚠️ Deprecation Warning Removed**: Deleted `DeprecationWarning` component completely
+  - Removed import from `App.tsx`
+  - Removed component usage from main UI
+  - Deleted component file entirely
+- **🧹 Clean UI**: No more migration notices or legacy mount warnings
+- **📱 Simplified Interface**: Clean three-tab navigation (Workspaces, Permissions, Server Status)
+
+### ✅ Testing & Verification
+- **🧪 MCP Client Tested**: All MCP operations working correctly with `/source` mount
+  - `tools/list` - ✅ Returns all 3 tools (read_file, list_files, write_file)
+  - File operations - ✅ Working with current permission rules
+  - Permission enforcement - ✅ Deny rules properly blocking access
+- **🎨 UI Verified**: Clean interface without deprecation warnings
+- **📊 Permission Testing**: Confirmed current workspace permissions working:
+  - `projects/` - Read access ✅
+  - `private stuff/` - Read-Write access ✅
+  - `materials/` - Denied (no rule) ✅
+
+### 🚀 Performance & Simplification Benefits
+- **⚡ Reduced Complexity**: Eliminated dual mount point logic and feature flags
+- **🧹 Cleaner Codebase**: Removed legacy compatibility code
+- **🎯 Better Maintainability**: Single path resolution logic
+- **📈 Improved User Experience**: No confusing migration warnings or dual system references
+
+### 🔄 Migration Impact
+- **✅ Seamless Transition**: No user action required
+- **🔧 Backward Compatibility**: All existing functionality preserved
+- **📊 Database Permissions**: Continue working unchanged
+- **🛡️ Security**: Same permission validation with simplified paths
+
+### Breaking Changes
+- ⚠️ **Docker Mount Point**: Legacy `/shared-fs` mount no longer available
+- ⚠️ **Feature Flags**: Removed dual mount point feature flags and detection logic
+- ⚠️ **UI Components**: DeprecationWarning component removed (no longer needed)
+
+### Developer Notes
+- All documentation updated to reflect single mount point architecture
+- Path resolution logic simplified throughout the codebase
+- No impact on MCP protocol compliance or database permissions
+- System now has cleaner, more maintainable architecture
+
 ## [3.0.0] - 2025-01-15 - Phase 3A: Database-Driven Workspace System Complete
 
 ### 🎉 Phase 3A Completion - Database-Driven Permission System with Full Workspace Backend

@@ -7,7 +7,7 @@ PERMISSIONS = {
     "working": ["projects", "output"],
 }
 
-SHARED_FS_PATH = "/shared-fs"
+SHARED_FS_PATH = "/source"
 
 # Feature flag integration
 try:

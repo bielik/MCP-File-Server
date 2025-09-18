@@ -7,7 +7,7 @@ services:
     volumes:
       - ./backend:/app
       - ${DATABASE_PATH:-./data}:/data
-      - ${SHARED_FS_PATH:-./shared-fs}:/shared-fs
+      - ${SHARED_FS_PATH:-./shared-fs}:/source     # Primary mount point
       - ./config:/config
     env_file:
       - ./.env

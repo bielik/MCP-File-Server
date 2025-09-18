@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any
 from app.services import permission_service
 
-SHARED_FS_PATH = "/shared-fs"
+SHARED_FS_PATH = "/source"
 
 def read_file(path: str) -> str:
     """Reads the content of a file."""

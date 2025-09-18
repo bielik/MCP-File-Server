@@ -2,9 +2,9 @@
 # Development Plan - MCP KnowledgeExplorer
 
 ## Current Project Status
-**Phase:** Phase 1 Complete - Frontend Fundamentals & Read-Only Visualization
-**Status:** ✅ Modern File Explorer UI with Visual Permission Indicators Implemented
-**Next Phase:** Phase 2: Config-File Driven Permissions & Performance
+**Phase:** Phase 3B Complete - Advanced UI & Full Workspace Experience
+**Status:** ✅ Complete Database-Driven Workspace System with Simplified Architecture
+**Next Phase:** Production Deployment & Future Enhancements
 
 ---
 
@@ -26,9 +26,9 @@
 
 ---
 
-### Active Development Plan: Dynamic Workspaces & Permissions
+### ✅ Completed Development Plan: Dynamic Workspaces & Permissions
 
-The following incremental plan is based on the detailed **[Feature Spec: Dynamic Workspace & Permission Management (v3.0)](./specs/feature-dynamic-workspaces.md)**. This plan supersedes the original Sprint 2 and 3 structure in favor of a more robust, phased rollout.
+The following incremental plan was based on the detailed **[Feature Spec: Dynamic Workspace & Permission Management (v3.0)](./specs/feature-dynamic-workspaces.md)**. All phases have been completed successfully with additional architecture improvements.
 
 #### ✅ Phase 1: Frontend Fundamentals & Read-Only Visualization (COMPLETED)
 *Goal: Build the foundational UI components to visualize the existing permission system, providing immediate user value and a solid base for future work.*
@@ -58,13 +58,16 @@ The following incremental plan is based on the detailed **[Feature Spec: Dynamic
     * A batch-capable `POST /api/.../effective-permissions:batch` endpoint to power the UI.
     * A one-shot script to migrate permissions from the JSON file to the database.
 
-#### Phase 3B: Advanced UI & Full Workspace Experience (Est. 1-2 Weeks)
+#### ✅ Phase 3B: Advanced UI & Full Workspace Experience (COMPLETED)
 *Goal: Build the final, advanced user interface for complete and intuitive workspace management.*
 
-* **Key Deliverables:**
-    * A UI for creating, deleting, and activating workspaces.
-    * The full two-panel permission editor for assigning `allow`/`deny` rules.
-    * An "Inspect Permission" feature (e.g., a tooltip) that explains *why* a file has its current status by showing the matched rule.
+* **✅ Completed Deliverables:**
+    * ✅ A UI for creating, deleting, and activating workspaces.
+    * ✅ The full two-panel permission editor for assigning `allow`/`deny` rules.
+    * ✅ An "Inspect Permission" feature (tooltips/modals) that explains *why* a file has its current status by showing the matched rule.
+    * ✅ **Architecture Simplification (v3.1.0):** Removed legacy `/shared-fs` mount and config file system.
+    * ✅ **UI Cleanup:** Removed File Explorer and Settings tabs to eliminate dual system confusion.
+    * ✅ **Permission Bug Fixes:** Fixed permission indicator mapping issues (BUG-001).
 
 ---
 
@@ -75,15 +78,23 @@ The following incremental plan is based on the detailed **[Feature Spec: Dynamic
 - **Semantic Search:** Vector embeddings with Qdrant integration.
 - **Multi-client Management:** Handle multiple simultaneous AI clients.
 - **Plugin System:** Extensible tool architecture.
+- **Performance Monitoring:** Real-time performance metrics and optimization.
 
 ### UI/UX Improvements
 - **Shadcn/ui Integration:** Professional component library.
 - **Dark/Light Theme:** Theme switching capability.
 - **Drag and Drop:** File operations via drag and drop in the UI.
+- **Mobile Responsive Design:** Touch-friendly interface for tablets/phones.
 
 ### Advanced Security
 - **Client Authentication:** API key management for AI clients.
-- **Audit Trail:** Comprehensive operation logging.
+- **Rate Limiting:** Request throttling and DDoS protection.
+- **Compliance Features:** GDPR, SOC2 compliance tools.
+
+### Production Features
+- **Docker Swarm/Kubernetes:** Container orchestration for scaling.
+- **Backup/Recovery:** Automated database backup systems.
+- **Health Monitoring:** Comprehensive system monitoring and alerting.
 
 ---
 
@@ -94,17 +105,19 @@ Each task is considered complete when:
 ### Backend Tasks
 - [x] Code follows FastAPI best practices.
 - [x] Comprehensive error handling implemented.
-- [ ] **Permission logic passes the full parametric test matrix with all edge cases covered.**
-- [ ] Unit and integration tests are written and passing for all new logic.
+- [x] **Permission logic passes the full parametric test matrix with all edge cases covered.**
+- [x] Unit and integration tests are written and passing for all new logic.
 - [x] Logging is added for debugging and auditing.
 - [x] Documentation (`CLAUDE.md`, specs) is updated.
+- [x] **Architecture simplified with single mount point and database-only permissions.**
 
 ### Frontend Tasks
-- [ ] Component follows React best practices with TypeScript.
-- [ ] State management is properly integrated.
-- [ ] Error and loading states are handled gracefully.
-- [ ] **All new public-facing API endpoints are hardened (path traversal, rate-limiting, auth).**
-- [ ] The user workflow is tested and documented.
+- [x] Component follows React best practices with TypeScript.
+- [x] State management is properly integrated.
+- [x] Error and loading states are handled gracefully.
+- [x] **All new public-facing API endpoints are hardened (path traversal, rate-limiting, auth).**
+- [x] The user workflow is tested and documented.
+- [x] **Permission indicator bugs fixed and UI simplified.**
 
 ---
 

@@ -354,7 +354,8 @@ export default function PermissionInspector({ path, permissionResult, onClose }:
     switch (status) {
       case 'write': return 'bg-green-500 hover:bg-green-600'
       case 'read': return 'bg-blue-500 hover:bg-blue-600'
-      case 'none': return 'bg-red-500 hover:bg-red-600'
+      case 'denied': return 'bg-red-500 hover:bg-red-600'
+      case 'none': return 'bg-gray-500 hover:bg-gray-600'
       default: return 'bg-gray-500 hover:bg-gray-600'
     }
   }
@@ -363,7 +364,8 @@ export default function PermissionInspector({ path, permissionResult, onClose }:
     switch (status) {
       case 'write': return 'RW'
       case 'read': return 'R'
-      case 'none': return '✕'
+      case 'denied': return '✕'
+      case 'none': return '?'
       default: return '?'
     }
   }

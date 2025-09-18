@@ -64,7 +64,7 @@ The system follows a **"Unified Hub"** architecture pattern - a single, persiste
 - **Volumes:**
   - Database: `./data` mounted to `/data`
   - Configuration: `./config` mounted to `/config`
-  - Shared Files: `C:/Users/MartinBielik/MCP Test/` mounted to `/shared-fs`
+  - Shared Files: `C:/Users/MartinBielik/MCP Test/` mounted to `/source`
 
 ## Working Directory Structure
 
@@ -81,11 +81,13 @@ C:/Users/MartinBielik/MCP Test/
     └── [private files]/
 ```
 
-**Permission Configuration:** `config/permissions.json`
+**Permission Configuration:** Database-driven workspaces (Phase 3)
 - materials/ - Read-only access (allow rule)
 - projects/ - Read-write access (allow rule)
 - materials/01_Introduction to Software Engineering/ - Blocked (deny rule overrides)
 - private stuff/ - No access (default deny)
+
+**Note:** The legacy `config/permissions.json` file has been removed to prevent confusion between config-file and database permission systems.
 
 ## Key Components and Endpoints
 
@@ -217,28 +219,28 @@ cd frontend && npm run dev
 
 ## Core Functionality (Current State)
 
-### ✅ Phase 2 Complete: Config-File Driven Permission System
+### ✅ System Architecture Complete: Simplified Single-Mount Design
 1. **Backend Hub Server:** Fully functional FastAPI server with WebSocket support
 2. **MCP Protocol Handler:** Complete JSON-RPC 2.0 implementation with MCP 2024-11-05 spec
 3. **File System Tools:** Production-ready tools with integrated security
-4. **🆕 Config Permission Management:** JSON-based permission rules with formal precedence
-5. **🆕 Trie-Based Caching:** High-performance permission resolution with in-memory cache
-6. **🆕 File Watcher Integration:** Automatic config reload on file changes
-7. **🆕 Feature Flag System:** Safe Phase 2/3 deployment with environment toggles
-8. **🆕 Permission Editor UI:** Visual and JSON editor with rule ID display
-9. **🆕 Atomic Config Updates:** Safe multi-user editing with optimistic locking
-10. **🆕 Verified Working State:** All bug fixes complete, full integration tested
+4. **🆕 Database Permission Management:** Full workspace-driven permission system
+5. **🆕 Trie-Based Caching:** High-performance permission resolution with workspace context
+6. **🆕 Real-time Updates:** WebSocket integration for live workspace switching
+7. **🆕 Feature Flag System:** Production-ready database permissions (Phase 3)
+8. **🆕 Workspace Management UI:** Complete workspace CRUD with visual indicators
+9. **🆕 Two-Panel Permission Editor:** Visual permission management with batch API
+10. **🆕 Permission Inspector:** Detailed rule explanations with matched rule info
 11. **Real-time Activity Logging:** WebSocket broadcasting of MCP operations to UI
 12. **Comprehensive Error Handling:** JSON-RPC compliant error responses
 13. **Dual WebSocket Management:** Separate handlers for UI and MCP clients
-14. **Database Integration:** SQLite setup with SQLAlchemy ORM
-15. **Docker Environment:** Complete containerization with development optimizations
+14. **Database Integration:** SQLite with full workspace/permission schema
+15. **Docker Environment:** Simplified single-mount containerization
 16. **Security Layer:** Path validation and directory traversal prevention
-17. **Advanced File Explorer:** Tree navigation with breadcrumbs and pagination
-18. **Visual Permission System:** Color-coded indicators (Read-Only/Read-Write/No Access)
+17. **Streamlined UI:** Clean 3-tab interface (Workspaces, Permissions, Server Status)
+18. **Visual Permission System:** Color-coded indicators with tooltip explanations
 19. **Secure Browse API:** `/api/browse` with pagination and security hardening
-20. **Enhanced UI:** Tabbed interface with File Explorer, Permission Editor, and Server Status
-21. **Permission Legend:** Clear documentation of permission levels in sidebar
+20. **Batch Permission API:** High-performance endpoint for UI integration
+21. **Legacy System Removed:** No more dual mount confusion or config file conflicts
 
 ### ✅ Complete: Phase 3A - Database-Driven Permissions
 1. ✅ **Database Schema:** Complete migration to SQLite with full workspace and permission models
@@ -247,11 +249,14 @@ cd frontend && npm run dev
 4. ✅ **Migration Tools:** Complete, idempotent config-to-database migration script
 5. ✅ **Batch Permission API:** High-performance endpoint for efficient UI integration
 
-### 🚧 Next: Phase 3B - Advanced Workspace UI
-1. **Workspace UI Components:** Create, delete, and activate workspaces from the UI
-2. **Two-Panel Permission Editor:** Full visual workspace permission management
-3. **"Inspect Permission" Feature:** Detailed permission explanations with matched rule info
-4. **Real-time Workspace Switching:** Dynamic UI updates when workspace context changes
+### ✅ Complete: Phase 3B - Advanced Workspace UI (FINISHED)
+1. ✅ **Workspace UI Components:** Create, delete, and activate workspaces from the UI
+2. ✅ **Two-Panel Permission Editor:** Full visual workspace permission management
+3. ✅ **"Inspect Permission" Feature:** Detailed permission explanations with matched rule info
+4. ✅ **Real-time Workspace Switching:** Dynamic UI updates when workspace context changes
+5. ✅ **Legacy System Cleanup:** Removed File Explorer and Settings tabs to eliminate confusion
+6. ✅ **Single Mount Architecture:** Simplified to `/source` mount only (removed `/shared-fs`)
+7. ✅ **Config File Cleanup:** Deleted `permissions.json` to prevent dual system conflicts
 
 ### 📋 Future Enhancements
 1. **Search Features:** Keyword and semantic search capabilities
@@ -261,15 +266,16 @@ cd frontend && npm run dev
 
 ## Security Model - ✅ PHASE 2 COMPLETE
 
-### Config-File Based Permissions
-- **Principle:** Permission rules defined in JSON configuration files
-- **Implementation:** `config_permission_service.py` with Trie caching
-- **Validation:** Every file operation validated against config rules
+### Database-Driven Permissions
+- **Principle:** Permission rules stored in SQLite database with workspace contexts
+- **Implementation:** `database_permission_service.py` with Trie caching
+- **Validation:** Every file operation validated against active workspace rules
+- **Legacy Support:** Config-file system maintained for backward compatibility (disabled by default)
 
 **Security Features:**
 - **Docker Bind Mounts:** Controlled interface to host file system
 - **Path Validation:** Prevents directory traversal attacks
-- **Mount Point Isolation:** All operations restricted to `/shared-fs`
+- **Mount Point Isolation:** All operations restricted to `/source`
 - **Formal Precedence Logic:**
   - **Specificity:** Child paths override parent paths
   - **Tie-Breaker:** Deny wins over allow for equal specificity
@@ -356,8 +362,9 @@ curl -X POST http://localhost:8000/api/workspaces/1/effective-permissions:batch 
 python -m app.scripts.migrate_config_to_db --workspace-name "Legacy Config" --activate --dry-run
 python -m app.scripts.migrate_config_to_db --workspace-name "Legacy Config" --activate  # Actual migration
 
-# Legacy Permission Management (Phase 2 - Still Available)
-curl http://localhost:8000/api/config/permissions           # View current config
+# Legacy Permission Management (Phase 2 - Deprecated)
+# Note: Config file system has been removed to prevent confusion
+# All permission management now uses the database workspace system above
 ```
 
 ## Testing Strategy
@@ -426,9 +433,16 @@ curl http://localhost:8000/api/config/permissions           # View current confi
 
 ---
 
-**🎉 The MCP KnowledgeExplorer Phase 2 is now complete and fully operational!**
+**🎉 The MCP KnowledgeExplorer is now complete with Phase 3B Advanced Workspace UI!**
 
-*The config-file driven permission system is production-ready with advanced caching, formal precedence logic, and a professional UI. The system has been successfully tested with actual filesystem access to C:/Users/MartinBielik/MCP Test/ containing materials, projects, and private directories. All Phase 2 features are implemented, tested, and working correctly.*
+*The database-driven workspace permission system is production-ready with advanced caching, formal precedence logic, and a comprehensive UI. The system architecture has been simplified with single `/source` mount point and removal of legacy config file system. All Phase 3B features are implemented, tested, and working correctly with full workspace management capabilities.*
+
+**Recent Improvements (v3.1.0):**
+- ✅ **Legacy Mount Removal:** Simplified from dual `/shared-fs` + `/source` to single `/source` mount
+- ✅ **UI Cleanup:** Removed File Explorer and Settings tabs to eliminate dual system confusion
+- ✅ **Config File Removal:** Deleted `permissions.json` to prevent config vs database conflicts
+- ✅ **Permission Bug Fixes:** Fixed permission indicator mapping bugs (BUG-001)
+- ✅ **Architecture Simplification:** Single source of truth with database-only permissions
 
 ---
-*This CLAUDE.md file serves as your primary context for understanding and working with the MCP KnowledgeExplorer project. Last updated: 2025-01-14 - Phase 2 Config-File Permission System Complete and Fully Operational*
+*This CLAUDE.md file serves as your primary context for understanding and working with the MCP KnowledgeExplorer project. Last updated: 2025-01-15 - Phase 3B Complete with Simplified Architecture*

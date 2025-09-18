@@ -1,8 +1,8 @@
 # Feature Spec: Dynamic Workspace & Permission Management (v3.0 - Final Implementation Blueprint)
 
-**Document Version:** 3.3
+**Document Version:** 3.4
 **Date:** 2025-01-15
-**Status:** ✅ Phase 3A Complete - Database-Driven Permission System with Full Workspace Backend
+**Status:** ✅ Phase 3B Complete - Advanced UI & Full Workspace Experience with Simplified Architecture
 
 ---
 
@@ -116,24 +116,30 @@ FEATURE_FLAGS = {
 1.  ✅ **Build Workspace UI:** Complete UI components implemented for creating, deleting, and activating workspaces. Workspace activation triggers proper UI refresh and permission cache invalidation. Active workspace indicator displays current context.
 2.  ✅ **Build Two-Panel Permission Editor:** Full editor implemented in `TwoPanelPermissionEditor` component. Left panel provides file tree navigation, right panel uses the `:batch` endpoint for efficient permission status fetching and displays real-time indicators.
 3.  ✅ **Implement "Inspect Permission" UI:** Permission indicators support both hover tooltips and click modals. Uses `matchedRule` data from `:batch` API to display human-readable explanations of permission decisions with rule precedence details.
+4.  ✅ **Architecture Simplification (v3.1.0):** Removed legacy `/shared-fs` mount and config file system to eliminate dual system confusion.
+5.  ✅ **UI Cleanup:** Removed deprecated File Explorer and Settings tabs, streamlined to 3-tab interface.
+6.  ✅ **Permission Bug Fixes:** Fixed permission indicator mapping issues (BUG-001) and resolved all UI inconsistencies.
 
 **✅ Testing Results:**
 
   * ✅ **Backend Test Suite:** Comprehensive test infrastructure in `backend/tests/phase3b/` with E2E workflow tests, integration tests, and performance benchmarks. Test isolation and session management issues resolved.
   * ✅ **Frontend Test Suite:** Complete browser MCP test infrastructure in `frontend/tests/browser-mcp/` with workspace management, permission editor, and real-time update tests (72.3 KB total test code).
-  * ✅ **Integration Validation:** Full workspace lifecycle confirmed working: create workspace → add permissions → activate → verify permission indicators display correctly in File Explorer.
-  * ✅ **Permission System Verification:** Confirmed working with actual filesystem at `C:/Users/MartinBielik/MCP Test/`:
+  * ✅ **Integration Validation:** Full workspace lifecycle confirmed working: create workspace → add permissions → activate → verify permission indicators display correctly in streamlined UI.
+  * ✅ **Permission System Verification:** Confirmed working with actual filesystem at `C:/Users/MartinBielik/MCP Test/` via single `/source` mount:
     - materials/: Read-Only access ✅
     - projects/: Read-Write access ✅
     - private stuff/: No Access ✅
   * ✅ **Performance Validated:** Batch API meets <100ms response time targets, Trie-based caching operational, memory usage stable.
+  * ✅ **Architecture Validated:** Single mount point system working correctly, no legacy mount confusion.
 
 -----
 
 ### 4\. Migration & Deprecation Strategy
 
-  * **Phase 2 -\> 3 Migration:** The `permissions.json` to database migration will be handled by a one-time execution of the migration script during deployment.
-  * **/shared-fs Deprecation:** The `/shared-fs` mount will be maintained for backward compatibility. After Phase 3, it will be exposed as a virtual `legacy/` directory within the `/source` mount. The UI will display a prominent, non-blocking warning to users still relying on the old system, guiding them to migrate their configuration. The `legacy/` mount will be fully removed in a future major version release.
+  * **Phase 2 -\> 3 Migration:** The `permissions.json` to database migration was handled by a one-time execution of the migration script during deployment. Config file has been removed to prevent confusion.
+  * **✅ /shared-fs Removal (v3.1.0):** The legacy `/shared-fs` mount has been completely removed. The system now uses a single `/source` mount point for all file operations. This simplification eliminates dual mount confusion and reduces complexity.
+  * **✅ Config File Cleanup:** The `config/permissions.json` file has been deleted to prevent conflicts between config-file and database permission systems.
+  * **✅ UI Simplification:** Deprecated File Explorer and Settings tabs have been removed to ensure users only interact with the database permission system.
 
 -----
 
@@ -149,6 +155,8 @@ All path inputs to the backend MUST undergo the following normalization and vali
 4.  Collapse multiple slashes (e.g., `//`) into a single slash.
 5.  Strip any trailing slash.
 6.  Paths are treated case-sensitively internally.
+
+**Note:** The legacy `/shared-fs` mount point has been removed. All operations now use the single `/source` mount for simplified security validation.
 
 #### B: Permission Precedence Logic
 
