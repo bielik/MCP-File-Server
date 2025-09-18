@@ -21,8 +21,18 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
 # Add the parent directory to sys.path so we can import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Load .env file from project root (go up from app/scripts to project root)
+script_dir = Path(__file__).parent if '__file__' in locals() else Path('.')
+project_root = script_dir.parent.parent.parent
+env_path = project_root / '.env'
+
+load_dotenv(env_path)
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
