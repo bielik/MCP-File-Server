@@ -34,9 +34,39 @@ function App() {
     // Fetch workspaces on mount
     fetchWorkspaces();
 
+    // Add native DOM event listeners for Browser MCP compatibility
+    const handleNativeClick = (event: Event) => {
+      const target = event.target as HTMLElement;
+      const testId = target.getAttribute('data-testid');
+
+      switch (testId) {
+        case 'workspaces-tab':
+          setActiveTab('workspaces');
+          break;
+        case 'permissions-tab':
+          setActiveTab('permissions');
+          break;
+        case 'status-tab':
+          setActiveTab('status');
+          break;
+      }
+    };
+
+    // Attach native listeners to tab buttons
+    const workspacesTab = document.querySelector('[data-testid="workspaces-tab"]');
+    const permissionsTab = document.querySelector('[data-testid="permissions-tab"]');
+    const statusTab = document.querySelector('[data-testid="status-tab"]');
+
+    workspacesTab?.addEventListener('click', handleNativeClick);
+    permissionsTab?.addEventListener('click', handleNativeClick);
+    statusTab?.addEventListener('click', handleNativeClick);
+
     // Cleanup on component unmount
     return () => {
       ignore = true;
+      workspacesTab?.removeEventListener('click', handleNativeClick);
+      permissionsTab?.removeEventListener('click', handleNativeClick);
+      statusTab?.removeEventListener('click', handleNativeClick);
     };
   }, [fetchWorkspaces]);
 
@@ -52,6 +82,7 @@ function App() {
           {/* Tab Navigation */}
           <div className="flex space-x-1 bg-gray-800 p-1 rounded-lg w-fit">
             <button
+              data-testid="workspaces-tab"
               onClick={() => setActiveTab('workspaces')}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
                 activeTab === 'workspaces'
@@ -63,6 +94,7 @@ function App() {
             </button>
             {activeWorkspace && (
               <button
+                data-testid="permissions-tab"
                 onClick={() => setActiveTab('permissions')}
                 className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
                   activeTab === 'permissions'
@@ -74,6 +106,7 @@ function App() {
               </button>
             )}
             <button
+              data-testid="status-tab"
               onClick={() => setActiveTab('status')}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
                 activeTab === 'status'

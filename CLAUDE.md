@@ -217,6 +217,129 @@ cd frontend && npm run dev
 - **Volume Mounts:** Code changes are immediately reflected without rebuilding containers
 - **CORS Configuration:** Pre-configured for local development
 
+## Ticket Management System
+
+### Overview
+The project uses a structured ticket system for tracking bugs, features, and issues in the `tickets/` folder. Each ticket includes comprehensive problem analysis, implementation plans, and testing strategies.
+
+### Naming Convention
+**Format:** `{NUMBER}-{TYPE}-{short-title}.md`
+
+**Examples:**
+- `001-BUG-permission-indicator-mapping.md`
+- `002-BUG-file-explorer-wrong-permissions.md`
+- `003-FEATURE-file-browser-navigation.md`
+
+### Ticket Types
+- **BUG**: Issues with existing functionality
+- **FEATURE**: New functionality requests
+- **ISSUE**: General problems or improvements
+- **ENHANCEMENT**: Improvements to existing features
+
+### Ticket Structure
+Each ticket must include these sections:
+
+#### 1. **Header & Metadata**
+```markdown
+# {NUMBER}-{TYPE}: {Descriptive Title}
+
+## Status: Open/In Progress/Closed
+**Created:** YYYY-MM-DD
+**Priority:** High/Medium/Low
+**Component:** Frontend/Backend/Full-stack
+```
+
+#### 2. **Problem Statement**
+- Clear description of the issue or requested feature
+- Current vs expected behavior
+- Root cause analysis when applicable
+- Screenshots or code references
+
+#### 3. **Implementation Plan**
+- Step-by-step technical approach
+- Files to be modified
+- Code examples or pseudocode
+- Architecture considerations
+
+#### 4. **Test Plan**
+**Must include both manual and automated testing approaches:**
+
+##### Manual Testing
+- Step-by-step test procedures
+- Expected outcomes for each step
+- Browser MCP integration for UI testing
+- Screenshot capture points
+
+##### Automated Testing
+- Test scripts using Browser MCP tools
+- Validation functions
+- Assertion criteria
+
+##### Browser MCP Testing Template
+```javascript
+async function validateFeature() {
+  // Navigate to app
+  await browser.navigate('http://localhost:5173')
+  await browser.wait(2)
+
+  // Take initial screenshot
+  await browser.screenshot()
+
+  // Perform test actions
+  await browser.click('element description', 'selector')
+
+  // Verify results
+  const snapshot = await browser.snapshot()
+  const isValid = snapshot.includes('expected-content')
+
+  console.log('Test Result:', isValid ? 'PASS' : 'FAIL')
+  return isValid
+}
+```
+
+#### 5. **Success Criteria**
+- Checkboxes with specific, measurable outcomes
+- Performance requirements
+- User experience validation
+
+#### 6. **References**
+- Links to relevant code files
+- Related tickets or documentation
+- External resources
+
+### Testing Integration
+All tickets must include Browser MCP integration for frontend testing:
+
+**Required Browser MCP Tools:**
+- `mcp__browser__browser_navigate` - Navigate to application
+- `mcp__browser__browser_screenshot` - Capture visual state
+- `mcp__browser__browser_snapshot` - Get DOM structure
+- `mcp__browser__browser_click` - Interact with elements
+- `mcp__browser__browser_wait` - Allow for loading/animations
+
+### Workflow
+1. **Create Ticket**: Use next available number and appropriate type
+2. **Analysis**: Include thorough problem analysis and root cause
+3. **Planning**: Detail implementation approach with specific files
+4. **Testing**: Define both manual procedures and automated validation
+5. **Implementation**: Follow the planned approach
+6. **Validation**: Execute test plan using Browser MCP
+7. **Documentation**: Update relevant documentation
+8. **Closure**: Mark ticket as closed with test results
+
+### Current Tickets
+- `001-BUG-permission-indicator-mapping.md` - Permission indicator display issues
+- `001-BUG-test-report.md` - Test report for permission indicators
+- `002-BUG-file-explorer-wrong-permissions.md` - File explorer permission problems
+- `003-FEATURE-file-browser-navigation.md` - Dynamic file browsing functionality
+
+### Best Practices
+- **Specific Titles**: Use descriptive, searchable titles
+- **Comprehensive Testing**: Always include Browser MCP automation
+- **Visual Validation**: Capture screenshots for UI changes
+- **Performance Metrics**: Include timing and resource requirements
+- **Cross-browser Testing**: Validate on multiple browsers when applicable
+
 ## Core Functionality (Current State)
 
 ### ✅ System Architecture Complete: Simplified Single-Mount Design

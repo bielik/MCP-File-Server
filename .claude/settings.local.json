@@ -47,7 +47,11 @@
       "Bash(cat:*)",
       "Bash(tree:*)",
       "mcp__wisdom__list_files",
-      "mcp__wisdom__read_file"
+      "mcp__wisdom__read_file",
+      "mcp__browser__browser_type",
+      "mcp__browser__browser_get_console_logs",
+      "mcp__wisdom__write_file",
+      "mcp__browser__browser_hover"
     ],
     "deny": [],
     "ask": []
