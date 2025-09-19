@@ -73,6 +73,17 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
             onClick={(e) => e.stopPropagation()}
           />
 
+          {/* Effective Permission Dot Indicator */}
+          <div className="w-4 h-4 flex items-center justify-center">
+            {permissionResult && permissionResult.status === 'write' ? (
+              <span className="text-green-500 text-sm" title="Write access">●</span>
+            ) : permissionResult && permissionResult.status === 'read' ? (
+              <span className="text-blue-500 text-sm" title="Read access">●</span>
+            ) : (
+              <span className="text-gray-400 text-sm" title="No access">○</span>
+            )}
+          </div>
+
           {/* File/Folder Icon and Name - clickable for folders */}
           <div
             className={`flex items-center space-x-2 flex-1 ${
@@ -105,8 +116,9 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
             </div>
           )}
 
-          {/* Permission Indicator */}
-          {permissionResult && (
+          {/* Rule Indicator - Only show for items with explicit rules on this exact path */}
+          {permissionResult && permissionResult.matchedRule &&
+           permissionResult.matchedRule.path === node.path && (
             <PermissionInspector
               path={node.path}
               permissionResult={permissionResult}
@@ -353,6 +365,23 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
       // Update tree structure
       updateTreeWithChildren(folderPath, children)
 
+      // Get permissions for newly loaded children immediately
+      if (children.length > 0) {
+        const childPaths = children.map(child => child.path)
+        try {
+          const results = await getBatchEffectivePermissions(workspaceId, childPaths)
+          setPermissionResults(prev => {
+            const newResults = new Map(prev)
+            results.forEach(result => {
+              newResults.set(result.path, result)
+            })
+            return newResults
+          })
+        } catch (error) {
+          console.error('Failed to get permissions for newly loaded children:', error)
+        }
+      }
+
       return children
     } finally {
       setLoadingPaths(prev => {
@@ -524,9 +553,6 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
     }
 
     setExpandedPaths(newExpanded)
-
-    // Update permissions for newly visible nodes
-    await updatePermissionResults(fileTree)
   }
 
   // Handle adding new permission
