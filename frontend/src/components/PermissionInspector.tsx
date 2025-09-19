@@ -21,6 +21,7 @@ function PermissionTooltip({ result, isVisible, position }: TooltipProps) {
     switch (status) {
       case 'write': return 'text-green-600 bg-green-50 border-green-200'
       case 'read': return 'text-blue-600 bg-blue-50 border-blue-200'
+      case 'denied': return 'text-red-600 bg-red-50 border-red-200'
       case 'none': return 'text-red-600 bg-red-50 border-red-200'
       default: return 'text-gray-600 bg-gray-50 border-gray-200'
     }
@@ -39,6 +40,12 @@ function PermissionTooltip({ result, isVisible, position }: TooltipProps) {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        )
+      case 'denied':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636" />
           </svg>
         )
       case 'none':
@@ -145,6 +152,17 @@ function DetailedPermissionModal({ result, isOpen, onClose }: DetailedModalProps
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          )
+        }
+      case 'denied':
+        return {
+          title: 'Access Denied',
+          description: 'Explicitly denied by permission rule - cannot read, write, or access this path',
+          color: 'bg-red-100 text-red-800',
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
           )
         }

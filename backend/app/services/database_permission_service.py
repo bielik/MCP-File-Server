@@ -244,22 +244,24 @@ class DatabasePermissionService:
                 read_allowed, read_rule = temp_trie.check_permission(normalized_path, "read")
                 write_allowed, write_rule = temp_trie.check_permission(normalized_path, "write")
 
-                # Determine final status
-                if write_allowed:
+                # Determine final status - prioritize deny rules first
+                # Check for explicit deny rules regardless of allow rules
+                if read_rule and read_rule.rule_type == "deny":
+                    status = "denied"
+                    matched_rule = read_rule
+                elif write_rule and write_rule.rule_type == "deny":
+                    status = "denied"
+                    matched_rule = write_rule
+                elif write_allowed:
                     status = "write"
                     matched_rule = write_rule
                 elif read_allowed:
                     status = "read"
                     matched_rule = read_rule
                 else:
-                    # Check if there was an explicit deny rule
-                    if read_rule and read_rule.rule_type == "deny":
-                        status = "denied"
-                        matched_rule = read_rule
-                    else:
-                        # No matching rule - default deny
-                        status = "none"
-                        matched_rule = None
+                    # No matching rule - default deny
+                    status = "none"
+                    matched_rule = None
 
                 # Convert matched rule to response format
                 matched_rule_info = None
@@ -295,22 +297,24 @@ class DatabasePermissionService:
             read_allowed, read_rule = self.trie.check_permission(normalized_path, "read")
             write_allowed, write_rule = self.trie.check_permission(normalized_path, "write")
 
-            # Determine final status and rule
-            if write_allowed:
+            # Determine final status and rule - prioritize deny rules first
+            # Check for explicit deny rules regardless of allow rules
+            if read_rule and read_rule.rule_type == "deny":
+                status = "denied"
+                matched_rule = read_rule
+            elif write_rule and write_rule.rule_type == "deny":
+                status = "denied"
+                matched_rule = write_rule
+            elif write_allowed:
                 status = "write"
                 matched_rule = write_rule
             elif read_allowed:
                 status = "read"
                 matched_rule = read_rule
             else:
-                # Check if there was an explicit deny rule
-                if read_rule and read_rule.rule_type == "deny":
-                    status = "denied"
-                    matched_rule = read_rule
-                else:
-                    # No matching rule - default deny
-                    status = "none"
-                    matched_rule = None
+                # No matching rule - default deny
+                status = "none"
+                matched_rule = None
 
             # Convert matched rule to response format
             matched_rule_info = None

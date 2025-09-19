@@ -75,7 +75,9 @@ function FileTree({ nodes, onNodeSelect, onNodeExpand, selectedPaths, expandedPa
 
           {/* Effective Permission Dot Indicator */}
           <div className="w-4 h-4 flex items-center justify-center">
-            {permissionResult && permissionResult.status === 'write' ? (
+            {permissionResult && permissionResult.status === 'denied' ? (
+              <span className="text-gray-400 text-sm" title="Access denied">○</span>
+            ) : permissionResult && permissionResult.status === 'write' ? (
               <span className="text-green-500 text-sm" title="Write access">●</span>
             ) : permissionResult && permissionResult.status === 'read' ? (
               <span className="text-blue-500 text-sm" title="Read access">●</span>

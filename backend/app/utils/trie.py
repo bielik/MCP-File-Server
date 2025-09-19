@@ -52,12 +52,22 @@ class TrieNode:
     def get_rules_by_operation(self, operation: str) -> List[PermissionRule]:
         """Get rules that apply to a specific operation."""
         matching_rules = []
+        explicit_deny_rules = []
+
         for rule in self.rules:
             if rule.permission_type == operation:
                 matching_rules.append(rule)
-            # Write permission implies read
-            elif rule.permission_type == "write" and operation == "read":
-                matching_rules.append(rule)
+                # Track explicit deny rules to prevent overrides
+                if rule.rule_type == "deny":
+                    explicit_deny_rules.append(rule)
+            # Write permission implies read - but ONLY for allow rules
+            # Deny rules must be explicit to prevent confusion
+            elif rule.permission_type == "write" and operation == "read" and rule.rule_type == "allow":
+                # Only add write->read implication if there's no explicit deny rule for read
+                has_explicit_deny = any(r.permission_type == "read" and r.rule_type == "deny" for r in self.rules)
+                if not has_explicit_deny:
+                    matching_rules.append(rule)
+
         return matching_rules
 
 
