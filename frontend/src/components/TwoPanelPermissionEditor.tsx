@@ -6,15 +6,18 @@
  * Right panel: Permission rules management with batch API integration
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { fileApi } from '../services/workspaceApi'
 import PermissionInspector from './PermissionInspector'
+import { useWebSocketContext } from '../contexts/WebSocketContext'
+import { useWebSocket } from '../hooks/useWebSocket'
 import type {
   TwoPanelPermissionEditorProps,
   FileTreeNode,
   EffectivePermissionResult,
-  PermissionCreate
+  PermissionCreate,
+  PermissionsUpdatedMessage
 } from '../types/workspace'
 
 interface FileTreeProps {
@@ -334,6 +337,31 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
   const [nodeCache, setNodeCache] = useState<Map<string, FileTreeNode[]>>(new Map())
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
 
+  // Debouncing for rapid permission changes
+  const permissionUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingPathsRef = useRef<Set<string>>(new Set())
+
+  // WebSocket integration for real-time permission updates
+  const { } = useWebSocket({
+    url: 'ws://localhost:8000/ws/ui',
+    reconnectInterval: 5000,
+    maxReconnectAttempts: 3,
+    onPermissionsUpdated: async (data: PermissionsUpdatedMessage) => {
+      // Only handle updates for the current workspace
+      if (data.workspaceId === workspaceId) {
+        console.log('🔄 Received real-time permission update for workspace', workspaceId)
+
+        // Use debounced update for affected paths if available
+        if (data.affectedPaths && data.affectedPaths.length > 0) {
+          await debouncedUpdatePermissions(data.affectedPaths)
+        } else {
+          // Full refresh for workspace (immediate, not debounced)
+          await updatePermissionResults(fileTree)
+        }
+      }
+    },
+  })
+
   // Fetch initial data
   useEffect(() => {
     fetchPermissions(workspaceId)
@@ -498,35 +526,88 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
   }
 
   // Collect all visible paths from file tree
-  const collectVisiblePaths = useCallback((nodes: FileTreeNode[], paths: string[] = []): string[] => {
+  const collectVisiblePaths = useCallback((nodes: FileTreeNode[], expandedPaths: Set<string>, paths: string[] = []): string[] => {
     nodes.forEach(node => {
       paths.push(node.path)
-      if (node.isDirectory && node.expanded && node.children) {
-        collectVisiblePaths(node.children, paths)
+      if (node.isDirectory && expandedPaths.has(node.path) && node.children) {
+        collectVisiblePaths(node.children, expandedPaths, paths)
       }
     })
     return paths
   }, [])
 
+  // Debounced permission update to handle rapid changes
+  const debouncedUpdatePermissions = useCallback(async (paths: string[]) => {
+    // Add paths to pending set
+    paths.forEach(path => pendingPathsRef.current.add(path))
+
+    // Clear existing timeout
+    if (permissionUpdateTimeoutRef.current) {
+      clearTimeout(permissionUpdateTimeoutRef.current)
+    }
+
+    // Set new timeout
+    permissionUpdateTimeoutRef.current = setTimeout(async () => {
+      const pathsToUpdate = Array.from(pendingPathsRef.current)
+      pendingPathsRef.current.clear()
+
+      if (pathsToUpdate.length > 0) {
+        console.log('🔄 Debounced permission update for paths:', pathsToUpdate)
+        await updatePermissionResults(fileTree, true, pathsToUpdate)
+      }
+    }, 300) // 300ms debounce delay
+  }, [fileTree])
+
   // Update permission results using batch API
-  const updatePermissionResults = async (tree: FileTreeNode[]) => {
+  const updatePermissionResults = useCallback(async (tree: FileTreeNode[], incremental = false, specificPaths?: string[]) => {
     setLoadingPermissions(true)
     try {
-      const visiblePaths = collectVisiblePaths(tree)
-      if (visiblePaths.length > 0) {
-        const results = await getBatchEffectivePermissions(workspaceId, visiblePaths)
-        const resultMap = new Map<string, EffectivePermissionResult>()
-        results.forEach(result => {
-          resultMap.set(result.path, result)
-        })
-        setPermissionResults(resultMap)
+      let pathsToCheck: string[]
+
+      if (specificPaths) {
+        // Use specific paths provided
+        pathsToCheck = specificPaths
+      } else {
+        // Collect all currently visible paths
+        pathsToCheck = collectVisiblePaths(tree, expandedPaths)
+      }
+
+      if (pathsToCheck.length > 0) {
+        const results = await getBatchEffectivePermissions(workspaceId, pathsToCheck)
+
+        if (incremental) {
+          // Update only specific paths, preserve existing results
+          setPermissionResults(prev => {
+            const newResults = new Map(prev)
+            results.forEach(result => {
+              newResults.set(result.path, result)
+            })
+            return newResults
+          })
+        } else {
+          // Full refresh - replace all results
+          const resultMap = new Map<string, EffectivePermissionResult>()
+          results.forEach(result => {
+            resultMap.set(result.path, result)
+          })
+          setPermissionResults(resultMap)
+        }
       }
     } catch (error) {
       console.error('Failed to get effective permissions:', error)
     } finally {
       setLoadingPermissions(false)
     }
-  }
+  }, [workspaceId, expandedPaths, collectVisiblePaths, getBatchEffectivePermissions])
+
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (permissionUpdateTimeoutRef.current) {
+        clearTimeout(permissionUpdateTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Handle file tree node selection
   const handleNodeSelect = (path: string, selected: boolean) => {
@@ -557,18 +638,59 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
     setExpandedPaths(newExpanded)
   }
 
+  // Get affected paths for a permission change (the path and all its children)
+  const getAffectedPaths = useCallback((rulePath: string): string[] => {
+    const affected: string[] = []
+    const collectAffectedPaths = (nodes: FileTreeNode[]) => {
+      nodes.forEach(node => {
+        // Include if the node path equals the rule path or is a child of it
+        if (node.path === rulePath || node.path.startsWith(rulePath + '/')) {
+          affected.push(node.path)
+        }
+        // Recursively check children if they're expanded
+        if (node.isDirectory && expandedPaths.has(node.path) && node.children) {
+          collectAffectedPaths(node.children)
+        }
+      })
+    }
+    collectAffectedPaths(fileTree)
+
+    // Also include the rule path itself if it's not in the tree yet
+    if (!affected.includes(rulePath)) {
+      affected.push(rulePath)
+    }
+
+    return affected
+  }, [fileTree, expandedPaths])
+
   // Handle adding new permission
   const handleAddPermission = async (permissionData: PermissionCreate) => {
     await addPermission(workspaceId, permissionData)
-    // Refresh permission results
-    await updatePermissionResults(fileTree)
+
+    // Get affected paths for debounced incremental update
+    const affectedPaths = getAffectedPaths(permissionData.path)
+
+    // Use debounced update for rapid changes
+    await debouncedUpdatePermissions(affectedPaths)
   }
 
   // Handle deleting permission
   const handleDeletePermission = async (permissionId: number) => {
+    // Find the permission being deleted to get its path
+    const permission = permissions.find(p => p.id === permissionId)
+
     await deletePermission(permissionId)
-    // Refresh permission results
-    await updatePermissionResults(fileTree)
+
+    if (permission) {
+      // Get affected paths for debounced incremental update
+      const affectedPaths = getAffectedPaths(permission.path)
+
+      // Use debounced update for rapid changes
+      await debouncedUpdatePermissions(affectedPaths)
+    } else {
+      // Fallback to full refresh if we can't find the permission
+      await updatePermissionResults(fileTree)
+    }
   }
 
   // Memoized permission list for better performance
