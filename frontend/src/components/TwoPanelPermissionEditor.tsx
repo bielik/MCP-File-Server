@@ -215,7 +215,7 @@ function AddPermissionModal({ isOpen, onClose, onSubmit, selectedPaths }: AddPer
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-gray-900">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Add Permission Rule</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -228,7 +228,7 @@ function AddPermissionModal({ isOpen, onClose, onSubmit, selectedPaths }: AddPer
               id="path"
               value={formData.path}
               onChange={(e) => setFormData(prev => ({ ...prev, path: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
               placeholder="e.g., projects/webapp or materials"
               disabled={isSubmitting}
               required
@@ -247,7 +247,7 @@ function AddPermissionModal({ isOpen, onClose, onSubmit, selectedPaths }: AddPer
                 id="rule_type"
                 value={formData.rule_type}
                 onChange={(e) => setFormData(prev => ({ ...prev, rule_type: e.target.value as 'allow' | 'deny' }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 disabled={isSubmitting}
               >
                 <option value="allow">Allow</option>
@@ -263,7 +263,7 @@ function AddPermissionModal({ isOpen, onClose, onSubmit, selectedPaths }: AddPer
                 id="permission_type"
                 value={formData.permission_type}
                 onChange={(e) => setFormData(prev => ({ ...prev, permission_type: e.target.value as 'read' | 'write' }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 disabled={isSubmitting}
               >
                 <option value="read">Read</option>
@@ -280,7 +280,7 @@ function AddPermissionModal({ isOpen, onClose, onSubmit, selectedPaths }: AddPer
               id="description"
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
               placeholder="Optional description for this rule..."
               rows={2}
               disabled={isSubmitting}
@@ -785,7 +785,7 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-2">
-                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                        <code className="text-sm bg-gray-100 text-gray-900 px-2 py-1 rounded">
                           {permission.path}
                         </code>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
