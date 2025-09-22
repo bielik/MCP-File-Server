@@ -18,37 +18,7 @@ Security remains paramount, with a highly optimized, **real-time permission filt
 
 The architecture explicitly defines a **blue-green indexing strategy** to handle concurrent access safely. The `Indexer Service` will build a new version of the index in the background. Once complete, an **atomic swap** will point the `Query Engine` to the new version, ensuring zero-downtime updates and that the query engine is never reading from a partially built index. SQLite will be configured in **`WAL` (Write-Ahead Logging) mode** to further enhance read/write concurrency.
 
-```ascii
-+-----------------------------+
-|        LLM Agent            |
-+-------------+---------------+
-              | (MCP over HTTP)
-+-------------v------------------------------------------------------------------+
-|                            Backend Service (FastAPI)                           |
-| +------------------------+   (QUERY ENGINE)         +------------------------+ |
-| |     MCP Endpoint       |------------------------->|     SearchService      | |
-| +------------------------+                          | (Reads active_index_v1)| |
-|                            (Atomic Swap)            +------------+-----------+ |
-| +----------------------------+-----------------------------------+------------+ |
-| | IndexVersionManager        |             (Permission Bitset + LRU Cache)   | |
-| | (Points to active index)   |                                     |           | |
-| +----------------------------+                        +------------v-----------+ |
-|                                                       |  PermissionService     | |
-| +------------------+-----------------+                +------------------------+ |
-| | SQLite WAL Mode  | | Qdrant         |                                         |
-| +------------------+ +----------------+                                         |
-+------------------------------------------------------------------------------+
-                                  ^
-                                  | (Builds inactive_index_v2)
-+---------------------------------+----------------------------------------------+
-| |                           Indexer Service (Python)                         | |
-| | +-----------------------+ +---------------------+ +----------------------+ | |
-| | | Resumable Job Queue   | | LlamaIndex Ingestion| | CPU Embedding Model  | | |
-| | |  (SQLite index_jobs)  | | (+OCR, Hashing, Lang)| |(MiniLM-L12-v2)       | | |
-| | +-----------------------+ +---------------------+ +----------------------+ | |
-| +--------------------------------------------------------------------------+ |
-+------------------------------------------------------------------------------+
-```
+
 
 #### **2.2. Component Design (Final)**
 
@@ -75,7 +45,25 @@ The architecture explicitly defines a **blue-green indexing strategy** to handle
 | **Embedding Model** | `paraphrase-multilingual-MiniLM-L12-v2`        | **CPU-based**, 384-dim model. Eliminates GPU dependencies and resource risk for the initial launch.                             |
 | **Keyword Search** | SQLite FTS5 with `trigram` tokenizer           | Provides excellent, built-in typo-tolerance and substring search for EN/DE without auxiliary tables.                            |
 | **Reranker (Optional)**| `jina-ai/jina-reranker-v2-base-multilingual`     | A lightweight CPU-based reranker enabled by a `.env` flag (`RERANK_ENABLED=true`) to improve precision.                     |
-| **Configuration** | `.env` file                                    | All new operational toggles (reranker, indexing batch size, etc.) will be managed here, maintaining a consistent project pattern. |
+| **Configuration** | `.env` file                                    | **Comprehensive configuration management** for hardware selection, feature toggles, and performance tuning (see detailed `.env` strategy below). |
+
+**Comprehensive `.env` Configuration Strategy:**
+
+The system uses environment variables for flexible deployment across different hardware configurations:
+
+**Hardware & Model Selection (Critical for RTX 4060 Support):**
+* `INDEX_EMBED_DEVICE`: Controls embedding model device (`cpu`/`gpu`) - enables GPU acceleration when available
+* `INDEX_EMBED_QUANT`: Future quantization control (`4bit`/`8bit`/`fp16`) for VRAM management with GPU models
+* `INDEX_EMBED_MODEL`: Model selection for different hardware capabilities
+
+**Feature Control:**
+* `OCR_ENABLED`: Toggle Tesseract OCR processing (`true`/`false`) - resource-intensive feature control
+* `RERANK_ENABLED`: Enable optional cross-encoder reranker (`true`/`false`) for quality vs. speed trade-offs
+
+**Performance & Behavior Tuning:**
+* `RETRIEVAL_MODE`: Search strategy (`hybrid`/`fts`/`vector`) - invaluable for debugging and optimization
+* `INDEXER_BATCH_SIZE`: Files processed per batch - tune memory usage vs. indexing speed
+* `INDEXER_MAX_WORKERS`: Parallel processing control for multi-core systems
 
 **Data Persistence:**
 * **Qdrant:** A named Docker volume (`qdrant_data`) will persist the vector index across restarts.

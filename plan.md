@@ -17,10 +17,17 @@ The next development cycle will focus on implementing the "Indexer-Query" archit
 * The **Backend Service** will act as a **Query Engine**, performing fast, permission-aware searches against the indexes using LlamaIndex as the core framework.
 * The initial implementation will use a high-performance **CPU-based embedding model** (`paraphrase-multilingual-MiniLM-L12-v2`) to eliminate GPU dependencies and ensure broad compatibility.
 
+**Configuration-Driven Flexibility:**
+* **Comprehensive `.env` strategy** enables seamless switching between hardware configurations (laptop CPU-only vs. desktop RTX 4060)
+* **Feature toggles** (`OCR_ENABLED`, `RERANK_ENABLED`) provide user control over resource-intensive features
+* **Performance tuning** (`RETRIEVAL_MODE`, `INDEXER_BATCH_SIZE`) allows optimization for different use cases
+* **Hardware selection** (`INDEX_EMBED_DEVICE`) enables GPU acceleration when available with automatic fallback to CPU
+
 ### Phase 4A - Resilient Foundation & Monitoring (Est. 2 weeks)
 *Goal: Build the resilient operational foundation and the user-facing dashboard first, delivering immediate value with metadata search tools while ensuring the system is stable and transparent.*
 
 * [ ] **Architecture:** Implement the three-service `docker-compose.yml` structure with health checks and default resource limits for the new `indexer` service.
+* [ ] **Configuration:** Establish comprehensive `.env` configuration system with hardware detection and feature toggles.
 * [ ] **Database:** Extend the SQLite schema with `indexed_files` and `index_jobs` tables.
 * [ ] **Indexer Service:** Build the initial service with a `watchdog`-based file watcher, debounce queue, file hashing, and the crash-recovery logic using the `index_jobs` table.
 * [ ] **UI:** Create the "Indexer Dashboard" in the frontend to display live status (`Idle`, `Indexing`), key metrics, and provide **Pause/Resume controls**.
@@ -30,9 +37,9 @@ The next development cycle will focus on implementing the "Indexer-Query" archit
 *Goal: Implement the core keyword and semantic search functionality using the reliable CPU-based model and high-quality search algorithms.*
 
 * [ ] **Database:** Implement the `text_chunks_fts` table using SQLite's FTS5 engine, configured with the `trigram` tokenizer for typo-tolerance.
-* [ ] **Indexer Service:** Integrate the `paraphrase-multilingual-MiniLM-L12-v2` embedding model. Extend the indexer to populate the FTS table and the Qdrant vector store.
+* [ ] **Indexer Service:** Integrate the `paraphrase-multilingual-MiniLM-L12-v2` embedding model with `.env`-controlled device selection (`INDEX_EMBED_DEVICE=cpu/gpu`). Extend the indexer to populate the FTS table and the Qdrant vector store.
 * [ ] **Indexer Service:** Implement pre-processing for German queries to handle compound word decomposition.
-* [ ] **Backend Service:** Integrate Qdrant. Implement the hybrid retrieval logic (FTS + Vector + Reciprocal Rank Fusion) within the `SearchService`.
+* [ ] **Backend Service:** Integrate Qdrant. Implement the hybrid retrieval logic (FTS + Vector + Reciprocal Rank Fusion) within the `SearchService` with configurable retrieval modes (`RETRIEVAL_MODE`).
 
 ### Phase 4C - Security Hardening & Final Polish (Est. 2 weeks)
 *Goal: Integrate the security layer, expose the final tools, and conduct stress testing.*
@@ -40,7 +47,8 @@ The next development cycle will focus on implementing the "Indexer-Query" archit
 * [ ] **Security:** Implement the `PermissionPostprocessor` with its per-workspace bitset and LRU cache for high-performance, real-time permission filtering of search results.
 * [ ] **MCP Tools:** Wire the fully secured query engine to the `search_content_by_keyword` and `search_content_by_semantic` tools.
 * [ ] **API:** Enrich MCP responses with explainability fields (`matched_permission_rule_id`, source citations).
-* [ ] **QA:** Conduct stress testing with a large dataset and integrate the optional reranker behind a feature flag.
+* [ ] **QA:** Conduct stress testing with a large dataset and integrate the optional reranker behind a feature flag (`RERANK_ENABLED`).
+* [ ] **Feature Integration:** Complete OCR integration with user control (`OCR_ENABLED`) and performance tuning options (`INDEXER_BATCH_SIZE`, `INDEXER_MAX_WORKERS`).
 
 ---
 

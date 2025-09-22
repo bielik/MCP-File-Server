@@ -49,40 +49,28 @@ This separation ensures that intensive background processing never impacts the r
 
 ## 3. System Architecture
 
-### 3.1. High-Level Diagram
+### 3.1. Architecture Diagram
+
+The complete system architecture is visualized in our comprehensive Mermaid diagram:
+
+📊 **[View Interactive Architecture Diagram](Software%20Architecture-2025-09-22-135021.mmd)**
+
+This diagram shows the complete three-service Docker architecture with all components, data flows, and `.env` configuration controls. Key architectural elements include:
+
+- **Frontend Service**: React UI with Indexer Dashboard
+- **Backend Service**: FastAPI Query Engine with LlamaIndex integration
+- **Indexer Service**: Background processing with crash-resilient job queue
+- **Data Stores**: SQLite (WAL mode), Qdrant vector DB, HuggingFace model cache
+- **Configuration**: Comprehensive `.env` system for hardware adaptation
+
+### 3.2. High-Level Flow
 
 ```ascii
-+-----------------------------+
-|        LLM Agent            |
-+-------------+---------------+
-              | (MCP over HTTP)
-+-------------v------------------------------------------------------------------+
-|                            Backend Service (FastAPI)                           |
-| +------------------------+   (QUERY ENGINE)         +------------------------+ |
-| |     MCP Endpoint       |------------------------->|     SearchService      | |
-| +------------------------+                          | (LlamaIndex)           | |
-|                                                       +------------+-----------+ |
-| +------------------------------------------------------------------+-----------+ |
-|            (SQL) |                                                  | (Permission Check)
-|                  |                                                  |
-| +----------------v--------------------------------+      +----------v---------+
-| |        Application DB (SQLite)                 |      |   PermissionService  |
-| | (Metadata, FTS Index, Jobs)                    |      +--------------------+
-| +------------------------------------------------+
-|                     | (Qdrant Client)
-| +-------------------v------------------------------------------------------+
-| |                          Vector DB Service (Qdrant)                        |
-| +--------------------------------------------------------------------------+
-+------------------------------------------------------------------------------+
-                                  ^
-                                  | (Populates Indexes)
-+---------------------------------+----------------------------------------------+
-| |                           Indexer Service (Python)                         | |
-| | +-----------------------+ +---------------------+ +----------------------+ | |
-| | | Resumable Job Queue   | | LlamaIndex Ingestion| | CPU Embedding Model  | | |
-| | +-----------------------+ +---------------------+ +----------------------+ | |
-| +--------------------------------------------------------------------------+ |
-+------------------------------------------------------------------------------+
+User/Agent → Frontend/MCP → Backend (Query Engine) → Permission Filter → Results
+                                ↓
+File System ← Indexer ← Job Queue ← File Watcher
+    ↓           ↓
+SQLite FTS ← Embedding Model → Qdrant Vector DB
 ```
 
 ---
@@ -108,7 +96,40 @@ The existing file system tools remain fully functional. Phase 4 will introduce a
 
 ---
 
-## 5. Technology Stack
+## 5. Configuration Management
+
+### 5.1. Environment Variables (`.env`)
+
+The system uses comprehensive `.env` configuration to support flexible deployment across different hardware setups:
+
+#### Hardware & Model Selection
+```bash
+# GPU/CPU switching - critical for RTX 4060 users
+INDEX_EMBED_DEVICE=cpu           # or 'gpu' when RTX 4060 available
+INDEX_EMBED_QUANT=fp16           # Future: 4bit/8bit/fp16 for VRAM management
+INDEX_EMBED_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+```
+
+#### Feature Toggles
+```bash
+# Resource-intensive features with user control
+OCR_ENABLED=true                 # Tesseract OCR processing
+RERANK_ENABLED=false             # Optional cross-encoder reranker
+```
+
+#### Performance Tuning
+```bash
+# Search and indexing behavior
+RETRIEVAL_MODE=hybrid            # hybrid/fts/vector - invaluable for debugging
+INDEXER_BATCH_SIZE=50            # Files per batch - tune memory vs speed
+INDEXER_MAX_WORKERS=2            # Parallel processing control
+```
+
+This configuration strategy enables seamless switching between laptop (CPU-only) and desktop (RTX 4060) environments while maintaining optimal performance for each setup.
+
+---
+
+## 6. Technology Stack
 
 | Category | Technology | Purpose | Status |
 | :--- | :--- | :--- | :--- |

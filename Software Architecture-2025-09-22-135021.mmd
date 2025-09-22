@@ -1,0 +1,156 @@
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph UAI["fa:fa-users User and Agent"]
+    direction TB
+        User["fa:fa-user User via Browser"]
+        Agent["fa:fa-robot LLM Agent"]
+  end
+ subgraph SQLite["fa:fa-database SQLite WAL mode"]
+    direction LR
+        SQLDB["fa:fa-file-alt database db"]
+        T_Perms["fa:fa-table workspaces_permissions"]
+        T_Files["fa:fa-table indexed_files"]
+        T_Chunks["fa:fa-table text_chunks_fts - SQLite FTS5 + trigram"]
+        T_Jobs["fa:fa-table index_jobs"]
+        T_Ctrl["fa:fa-table control"]
+        T_Vers["fa:fa-table index_versions"]
+  end
+ subgraph STORES["fa:fa-database Data Stores"]
+    direction TB
+        Qdrant["fa:fa-database Vector DB Qdrant - named volume"]
+        HFCache["fa:fa-box-open HF Models Cache - volume"]
+        SQLite
+  end
+ subgraph FE["fa:fa-desktop Frontend Service UI"]
+    direction TB
+        UI["fab:fa-react React UI - Indexer Dashboard - File Browser"]
+  end
+ subgraph BE["fa:fa-server Backend Service Query and File Engine"]
+    direction TB
+        FastAPI["fa:fa-bolt FastAPI Server"]
+        Endpoints["fa:fa-route Endpoints REST and MCP"]
+        SearchSvc["fa:fa-search SearchService uses LlamaIndex - graceful degradation"]
+        Reranker["fa:fa-sort-amount-down Cross Encoder Reranker"]
+        RRF["fa:fa-compress-arrows-alt Reciprocal Rank Fusion"]
+        PermSvc["fa:fa-shield-alt Permissions Filter bitset plus LRU"]
+        FileSvc["fa:fa-folder-open File System Service"]
+  end
+ subgraph IDX["fa:fa-cogs Indexer Service Background"]
+    direction TB
+        Indexer["fa:fa-cog Indexing Worker"]
+        Watcher["fa:fa-eye File Watcher"]
+        JobQueue["fa:fa-tasks Job Queue Logic"]
+        Ingestion["fa:fa-file-import Ingestion OCR and Decompounding uses LlamaIndex"]
+        Embed["fa:fa-brain EmbeddingModel paraphrase multilingual MiniLM or future model"]
+  end
+ subgraph DOCKER["fab:fa-docker Docker Environment"]
+    direction TB
+        STORES
+        FE
+        BE
+        IDX
+        FS["fa:fa-folder /source Shared Volume/"]
+  end
+ subgraph ENV["fa:fa-sliders-h .env configuration"]
+    direction TB
+        ENV_DEVICE["fa:fa-toggle-on INDEX_EMBED_DEVICE gpu or cpu"]
+        ENV_QUANT["fa:fa-toggle-on INDEX_EMBED_QUANT 4bit 8bit fp16"]
+        ENV_MODEL["fa:fa-toggle-on INDEX_EMBED_MODEL model id"]
+        ENV_OCR["fa:fa-toggle-on OCR_ENABLED true or false"]
+        ENV_RERANK["fa:fa-toggle-on RERANK_ENABLED true or false"]
+        ENV_MODE["fa:fa-toggle-on RETRIEVAL_MODE hybrid fts vector"]
+        ENV_BATCH["fa:fa-toggle-on INDEXER_BATCH_SIZE number"]
+        ENV_WORKERS["fa:fa-toggle-on INDEXER_MAX_WORKERS number"]
+  end
+    FastAPI --> Endpoints
+    Endpoints --> SearchSvc & FileSvc
+    SearchSvc -. "fallback to FTS-only when Qdrant degraded" .-> T_Chunks
+    Indexer --- Watcher & JobQueue & Ingestion
+    JobQueue --> T_Jobs & Ingestion
+    User --> UI
+    Agent -- MCP tool calls --> Endpoints
+    UI -- GET POST api workspaces --> Endpoints
+    Endpoints -- write rules --> T_Perms
+    PermSvc -- read rules --> T_Perms
+    PermSvc -- precompute bitset on change --> T_Perms
+    UI -- GET api browse --> Endpoints
+    Endpoints -- list --> FileSvc
+    FileSvc -- read dir --> FS
+    Endpoints -- write_file --> FileSvc
+    FileSvc -- write --> FS
+    Endpoints -- read_file --> FileSvc
+    FileSvc -- read file --> FS
+    FS -- fs events --> Watcher
+    Watcher -- queue job --> JobQueue
+    Ingestion -- read file --> FS
+    Ingestion -- write metadata --> T_Files
+    Ingestion -- write chunks and FTS rows --> T_Chunks
+    Ingestion --> Embed
+    Embed -- upsert vectors --> Qdrant
+    ENV_MODE --> SearchSvc
+    IDX -. Indexer updates version .-> T_Vers
+    BE -. Backend reads active version .-> T_Vers
+    SearchSvc -- vector search --> Qdrant
+    SearchSvc -- keyword search FTS5 --> T_Chunks
+    Qdrant --> RRF
+    T_Chunks --> RRF
+    RRF --> PermSvc
+    PermSvc -- "filter authorized top-K" --> Reranker
+    Reranker -- optional RERANK_ENABLED --> Endpoints
+    PermSvc -- if rerank disabled --> Endpoints
+    SearchSvc -- keyword and metadata --> T_Files
+    UI -- POST api indexer pause --> Endpoints
+    Endpoints -- update state --> T_Ctrl
+    IDX -- read throttle state --> T_Ctrl
+    Indexer -. metrics: queue, files per min, ETA .-> UI
+    BE -. metrics: p95 latency, fallbacks .-> UI
+    ENV_DEVICE --> Embed
+    ENV_QUANT --> Embed
+    ENV_MODEL --> Embed
+    ENV_OCR --> Ingestion
+    ENV_RERANK --> Reranker
+    ENV_BATCH --> Indexer
+    ENV_WORKERS --> Indexer
+     Qdrant:::stores
+     HFCache:::stores
+     SQLDB:::stores
+     T_Perms:::stores
+     T_Files:::stores
+     T_Chunks:::stores
+     T_Jobs:::stores
+     T_Ctrl:::stores
+     T_Vers:::stores
+     UI:::ui
+     FastAPI:::be
+     Endpoints:::be
+     SearchSvc:::be
+     Reranker:::be
+     RRF:::be
+     PermSvc:::be
+     FileSvc:::be
+     Indexer:::idx
+     Watcher:::idx
+     JobQueue:::idx
+     Ingestion:::idx
+     Embed:::idx
+     FS:::fs
+     ENV_DEVICE:::env
+     ENV_QUANT:::env
+     ENV_MODEL:::env
+     ENV_OCR:::env
+     ENV_RERANK:::env
+     ENV_MODE:::env
+     ENV_BATCH:::env
+     ENV_WORKERS:::env
+     IDX:::idx
+     BE:::be
+    classDef ui fill:#e6f3ff,stroke:#0066cc,stroke-width:2px,color:#002b55
+    classDef be fill:#e6fff2,stroke:#008040,stroke-width:2px,color:#003322
+    classDef idx fill:#fff2e6,stroke:#cc6600,stroke-width:2px,color:#5a2d00
+    classDef stores fill:#f2f2f2,stroke:#666,stroke-width:2px,color:#222
+    classDef env fill:#f7f1ff,stroke:#6b3fa0,stroke-width:2px,color:#2b1b47
+    classDef fs fill:#ffeef7,stroke:#b30059,stroke-width:2px,color:#4d0033
+    classDef docker fill:#f9f9ff,stroke:#333399,stroke-width:2px,color:#111144
