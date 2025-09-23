@@ -1,5 +1,12 @@
 from sqlalchemy import Column, Integer, String
-from ..database import Base
+try:
+    from ..database import Base
+except ImportError:
+    # Handle import from external context (like indexer)
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from database import Base
 
 class Setting(Base):
     __tablename__ = "settings"

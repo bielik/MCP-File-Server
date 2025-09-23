@@ -9,9 +9,16 @@ services:
       - ${DATABASE_PATH:-./data}:/data
       - ${SHARED_FS_PATH:-./shared-fs}:/source     # Primary mount point
       - ./config:/config
+      - huggingface_cache:/root/.cache/huggingface  # ML model cache
     env_file:
       - ./.env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
@@ -24,7 +31,48 @@ services:
     env_file:
       - ./.env
     command: npm run dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  indexer:
+    build:
+      context: ./indexer
+    ports:
+      - "${INDEXER_PORT:-8002}:8002"
+    volumes:
+      - ./indexer:/app
+      - ./backend:/backend                          # Mount backend for shared models and db bootstrap
+      - ${DATABASE_PATH:-./data}:/data
+      - ${SHARED_FS_PATH:-./shared-fs}:/source     # Same mount as backend
+      - ./config:/config
+      - huggingface_cache:/root/.cache/huggingface  # Shared ML model cache
+      - qdrant_data:/qdrant                         # Vector database storage
+    env_file:
+      - ./.env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8002/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   db_data:
   shared_files:
+  huggingface_cache:    # Persistent ML model storage
+  qdrant_data:          # Vector database persistence

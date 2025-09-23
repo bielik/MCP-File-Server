@@ -2,12 +2,19 @@
 Configuration and feature flags for the MCP KnowledgeExplorer.
 
 This module manages feature flags for the dynamic workspace system
-and other configuration settings.
+and other configuration settings. Now uses Phase4AConfig for consistency.
 """
 
 import os
+import sys
 from typing import Dict, Any, Optional
 from pathlib import Path
+
+# Add config directory to path for Phase4AConfig import
+sys.path.append('/config')
+
+# Import Phase4AConfig for single source of truth
+from env_config import get_config as get_phase4a_config, Phase4AConfig
 
 
 class FeatureFlags:
@@ -19,15 +26,13 @@ class FeatureFlags:
     """
 
     def __init__(self):
-        # Phase 2 feature flags
+        # Phase 2 feature flags (legacy - not used in Phase 3B+)
         self.ENABLE_CONFIG_FILE_PERMISSIONS = self._get_bool_env(
             "ENABLE_CONFIG_FILE_PERMISSIONS", False
         )
 
-        # Phase 3 feature flags (for future use)
-        self.ENABLE_DATABASE_PERMISSIONS = self._get_bool_env(
-            "ENABLE_DATABASE_PERMISSIONS", False
-        )
+        # Phase 3 feature flags (re-enabled for proper Phase 4A functionality)
+        self.ENABLE_DATABASE_PERMISSIONS = True  # Re-enabled for Phase 4A
 
         # Phase 4 feature flags (migration & deprecation)
         self.ENABLE_SOURCE_MOUNT = self._get_bool_env(
@@ -86,8 +91,10 @@ class Config:
         # Base paths
         self.BASE_DIR = Path(__file__).parent.parent.parent
         self.CONFIG_DIR = self.BASE_DIR / "config"
-        self.DATA_DIR = self.BASE_DIR / "data"
-        self.SHARED_FS_PATH = "/shared-fs"  # Legacy mount point
+        # Use Docker volume mount path for database in container
+        # In Docker, always use /data. Outside Docker, use ./data
+        self.DATA_DIR = Path("/data") if Path("/data").exists() else self.BASE_DIR / "data"
+        self.SHARED_FS_PATH = "/source"   # Primary mount point (updated for Phase 4A)
         self.SOURCE_MOUNT_PATH = "/source"   # New primary mount point
 
         # Permission configuration
@@ -157,9 +164,45 @@ def get_feature_flags() -> FeatureFlags:
     return feature_flags
 
 
-def get_config() -> Config:
-    """Get the global configuration instance."""
-    return config
+def get_config():
+    """Get the global configuration instance with backward compatibility."""
+    # Get Phase4A config
+    phase4a_config = get_phase4a_config()
+
+    # Create a hybrid config object that includes both old and new attributes
+    class HybridConfig:
+        def __init__(self, phase4a_config):
+            # Copy all Phase4A attributes
+            for attr in dir(phase4a_config):
+                if not attr.startswith('_'):
+                    setattr(self, attr, getattr(phase4a_config, attr))
+
+            # Standardized database URL construction
+            # In Docker containers, always use /data regardless of DATABASE_PATH env var
+            import os
+            if os.path.exists('/data'):
+                # Running in Docker container
+                database_path = '/data'
+            else:
+                # Running locally
+                database_path = getattr(phase4a_config, 'DATABASE_PATH', './data')
+
+            # Normalize the database path - ensure it points to the database file, not directory
+            from pathlib import Path
+            db_path = Path(database_path)
+
+            # If it's a directory path, append database.db
+            if not str(db_path).endswith('.db'):
+                db_path = db_path / 'database.db'
+
+            self.DATABASE_URL = f"sqlite:///{db_path}"
+
+            # Log the effective database URL for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Database URL configured: {self.DATABASE_URL}")
+
+    return HybridConfig(phase4a_config)
 
 
 def is_phase2_enabled() -> bool:

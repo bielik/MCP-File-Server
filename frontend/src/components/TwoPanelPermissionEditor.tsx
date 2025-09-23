@@ -11,13 +11,11 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import { fileApi } from '../services/workspaceApi'
 import PermissionInspector from './PermissionInspector'
 import { useWebSocketContext } from '../contexts/WebSocketContext'
-import { useWebSocket } from '../hooks/useWebSocket'
 import type {
   TwoPanelPermissionEditorProps,
   FileTreeNode,
   EffectivePermissionResult,
-  PermissionCreate,
-  PermissionsUpdatedMessage
+  PermissionCreate
 } from '../types/workspace'
 
 interface FileTreeProps {
@@ -341,26 +339,12 @@ export default function TwoPanelPermissionEditor({ workspaceId, className = '' }
   const permissionUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingPathsRef = useRef<Set<string>>(new Set())
 
-  // WebSocket integration for real-time permission updates
-  const { } = useWebSocket({
-    url: 'ws://localhost:8000/ws/ui',
-    reconnectInterval: 5000,
-    maxReconnectAttempts: 3,
-    onPermissionsUpdated: async (data: PermissionsUpdatedMessage) => {
-      // Only handle updates for the current workspace
-      if (data.workspaceId === workspaceId) {
-        console.log('🔄 Received real-time permission update for workspace', workspaceId)
+  // Use shared WebSocket context for connection status
+  const { isConnected } = useWebSocketContext()
 
-        // Use debounced update for affected paths if available
-        if (data.affectedPaths && data.affectedPaths.length > 0) {
-          await debouncedUpdatePermissions(data.affectedPaths)
-        } else {
-          // Full refresh for workspace (immediate, not debounced)
-          await updatePermissionResults(fileTree)
-        }
-      }
-    },
-  })
+  // Handle permission updates through the shared WebSocket context
+  // Note: Permission updates are now handled centrally through the WebSocketContext
+  // and will trigger workspace store updates which refresh the UI automatically
 
   // Fetch initial data
   useEffect(() => {

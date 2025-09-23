@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import WorkspaceManager from './components/WorkspaceManager';
 import TwoPanelPermissionEditor from './components/TwoPanelPermissionEditor';
+import IndexerDashboard from './components/IndexerDashboard';
 import { useWebSocketContext } from './contexts/WebSocketContext';
 import { useWorkspaceStore, useActiveWorkspaceId } from './store/workspaceStore';
 
 function App() {
   const [config, setConfig] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'workspaces' | 'permissions' | 'status'>('workspaces');
+  const [activeTab, setActiveTab] = useState<'workspaces' | 'permissions' | 'indexer' | 'status'>('workspaces');
 
   // Use WebSocket context
   const { isConnected, logs, clearLogs, error: wsError } = useWebSocketContext();
@@ -46,6 +47,9 @@ function App() {
         case 'permissions-tab':
           setActiveTab('permissions');
           break;
+        case 'indexer-tab':
+          setActiveTab('indexer');
+          break;
         case 'status-tab':
           setActiveTab('status');
           break;
@@ -55,10 +59,12 @@ function App() {
     // Attach native listeners to tab buttons
     const workspacesTab = document.querySelector('[data-testid="workspaces-tab"]');
     const permissionsTab = document.querySelector('[data-testid="permissions-tab"]');
+    const indexerTab = document.querySelector('[data-testid="indexer-tab"]');
     const statusTab = document.querySelector('[data-testid="status-tab"]');
 
     workspacesTab?.addEventListener('click', handleNativeClick);
     permissionsTab?.addEventListener('click', handleNativeClick);
+    indexerTab?.addEventListener('click', handleNativeClick);
     statusTab?.addEventListener('click', handleNativeClick);
 
     // Cleanup on component unmount
@@ -66,6 +72,7 @@ function App() {
       ignore = true;
       workspacesTab?.removeEventListener('click', handleNativeClick);
       permissionsTab?.removeEventListener('click', handleNativeClick);
+      indexerTab?.removeEventListener('click', handleNativeClick);
       statusTab?.removeEventListener('click', handleNativeClick);
     };
   }, [fetchWorkspaces]);
@@ -92,19 +99,28 @@ function App() {
             >
               🏠 Workspaces
             </button>
-            {activeWorkspace && (
-              <button
-                data-testid="permissions-tab"
-                onClick={() => setActiveTab('permissions')}
-                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                  activeTab === 'permissions'
-                    ? 'bg-cyan-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                🔐 Permissions
-              </button>
-            )}
+            <button
+              data-testid="permissions-tab"
+              onClick={() => setActiveTab('permissions')}
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                activeTab === 'permissions'
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              📁 File Browser
+            </button>
+            <button
+              data-testid="indexer-tab"
+              onClick={() => setActiveTab('indexer')}
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                activeTab === 'indexer'
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              🔍 Indexer
+            </button>
             <button
               data-testid="status-tab"
               onClick={() => setActiveTab('status')}
@@ -130,12 +146,33 @@ function App() {
           <WorkspaceManager />
         )}
 
-        {activeTab === 'permissions' && activeWorkspaceId && (
+        {activeTab === 'permissions' && (
           <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '70vh' }}>
-            <TwoPanelPermissionEditor workspaceId={activeWorkspaceId} />
+            {activeWorkspaceId ? (
+              <TwoPanelPermissionEditor workspaceId={activeWorkspaceId} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-gray-500">
+                  <div className="text-6xl mb-4">📁</div>
+                  <h3 className="text-xl font-semibold mb-2">No Active Workspace</h3>
+                  <p className="text-gray-400 mb-4">Create or activate a workspace to manage file permissions.</p>
+                  <button
+                    onClick={() => setActiveTab('workspaces')}
+                    className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                  >
+                    Go to Workspaces
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
+        {activeTab === 'indexer' && (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <IndexerDashboard />
+          </div>
+        )}
 
         {activeTab === 'status' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

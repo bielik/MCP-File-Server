@@ -8,11 +8,18 @@ implementing the Phase 3A database schema as specified in the feature spec.
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint, event
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint, event, Index
 from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.sql import func
 
-from ..database import Base
+try:
+    from ..database import Base
+except ImportError:
+    # Handle import from external context (like indexer)
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from database import Base
 
 
 class Workspace(Base):
@@ -97,6 +104,7 @@ class Permission(Base):
             'workspace_id', 'path', 'permission_type', 'rule_type',
             name='unique_permission_rule'
         ),
+        {}, # Required empty dict at end for SQLAlchemy
     )
 
     def __repr__(self):

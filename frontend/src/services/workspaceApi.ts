@@ -55,10 +55,10 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
 // Workspace API operations
 export const workspaceApi = {
   // Get all workspaces
-  async getWorkspaces(): Promise<Workspace[]> {
+  async getWorkspaces(): Promise<{ workspaces: Workspace[], total: number, active_workspace_id: number | null }> {
     const response = await fetch(`${API_BASE_URL}/workspaces`)
-    const data = await handleApiResponse<{ workspaces: Workspace[] }>(response)
-    return data.workspaces
+    const data = await handleApiResponse<{ workspaces: Workspace[], total: number, active_workspace_id: number | null }>(response)
+    return data
   },
 
   // Get specific workspace
@@ -174,6 +174,7 @@ export const workspaceApi = {
     const data = await handleApiResponse<{ permissions: Permission[] }>(response)
     return data.permissions
   },
+
 }
 
 // File browser API operations (reuse existing endpoint)

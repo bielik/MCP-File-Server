@@ -10,8 +10,10 @@ from fastapi import APIRouter, HTTPException
 from app.services.path_resolver import get_path_resolver
 from app.config import get_config, get_feature_flags
 from app.crud import permission_crud
-from app.database import SessionLocal
+from app.database import SessionLocal, engine, get_db
 import logging
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +125,8 @@ async def get_system_health() -> Dict[str, Any]:
             if feature_flags.is_database_permissions_enabled():
                 db = SessionLocal()
                 # Simple query to check database health
-                db.execute("SELECT 1")
+                from sqlalchemy import text
+                db.execute(text("SELECT 1"))
                 db.close()
         except Exception as e:
             logger.warning(f"Database health check failed: {e}")
@@ -157,6 +160,93 @@ async def get_system_health() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting system health: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get system health: {str(e)}")
+
+
+@router.get("/db-info")
+async def get_database_info() -> Dict[str, Any]:
+    """
+    Get comprehensive database information for debugging.
+
+    Returns effective database URL, table counts, WAL status, and other
+    diagnostic information to help troubleshoot database connectivity issues.
+    """
+    try:
+        config = get_config()
+
+        # Get effective database URL and file path
+        db_url = getattr(config, 'DATABASE_URL', 'Unknown')
+        db_path = getattr(config, 'DATABASE_PATH', 'Unknown')
+
+        # Extract actual file path from SQLite URL
+        file_path = None
+        if db_url.startswith('sqlite:///'):
+            file_path = db_url[10:]  # Remove 'sqlite:///' prefix
+
+        # Check if database file exists
+        file_exists = False
+        file_size = 0
+        if file_path:
+            file_exists = os.path.exists(file_path)
+            if file_exists:
+                file_size = os.path.getsize(file_path)
+
+        # Get database statistics
+        table_counts = {}
+        wal_mode = None
+        db_version = None
+
+        try:
+            session = next(get_db())
+            try:
+                # Check WAL mode
+                from sqlalchemy import text
+                wal_result = session.execute(text("PRAGMA journal_mode")).fetchone()
+                wal_mode = wal_result[0] if wal_result else "unknown"
+
+                # Get SQLite version
+                version_result = session.execute(text("SELECT sqlite_version()")).fetchone()
+                db_version = version_result[0] if version_result else "unknown"
+
+                # Get table counts for core tables
+                tables = ['workspaces', 'permissions', 'indexed_files', 'index_jobs', 'control_settings']
+                for table in tables:
+                    try:
+                        count_result = session.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+                        table_counts[table] = count_result[0] if count_result else 0
+                    except Exception as e:
+                        table_counts[table] = f"Error: {str(e)}"
+            finally:
+                session.close()
+
+        except Exception as e:
+            logger.error(f"Database query failed: {e}")
+            table_counts = {"error": str(e)}
+
+        return {
+            "status": "success",
+            "database": {
+                "config_url": db_url,
+                "config_path": db_path,
+                "resolved_file_path": file_path,
+                "file_exists": file_exists,
+                "file_size_bytes": file_size,
+                "wal_mode": wal_mode,
+                "sqlite_version": db_version,
+                "engine_url": str(engine.url) if engine else "Not initialized"
+            },
+            "tables": table_counts,
+            "environment": {
+                "DATABASE_PATH": os.environ.get('DATABASE_PATH', 'Not set'),
+                "working_directory": os.getcwd(),
+                "container_data_dir_exists": os.path.exists('/data'),
+                "container_data_contents": os.listdir('/data') if os.path.exists('/data') else None
+            },
+            "timestamp": "2025-01-23T00:00:00Z"
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting database info: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get database info: {str(e)}")
 
 
 def _get_migration_recommendations(mount_status: Dict[str, Any], deprecation_info: Dict[str, Any]) -> list:

@@ -1,0 +1,96 @@
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph UAI["fa:fa-users User and Agent"]
+    direction TB
+        User["fa:fa-user User via Browser"]
+        Agent["fa:fa-robot LLM Agent"]
+  end
+ subgraph STORES["fa:fa-database Data Stores"]
+    direction TB
+        Qdrant["fa:fa-database Vector DB Qdrant"]
+        SQLite["fa:fa-file-alt SQLite - Metadata + FTS"]
+  end
+ subgraph FE["fa:fa-desktop Frontend UI"]
+    direction TB
+        UI["fab:fa-react React UI"]
+  end
+ subgraph BE["fa:fa-server Backend API & Search"]
+    direction TB
+        API["fa:fa-route FastAPI Endpoints (REST + MCP)"]
+        Search["fa:fa-search Search Engine"]
+        Fusion["fa:fa-compress-arrows-alt Result Fusion (Hybrid)"]
+        Perms["fa:fa-shield-alt Permissions Filter"]
+        Rerank["fa:fa-sort-amount-down Optional Reranker"]
+        FileSvc["fa:fa-folder-open File Service"]
+  end
+ subgraph IDX["fa:fa-cogs Indexer (Background)"]
+    direction TB
+        Indexer["fa:fa-cog Indexing Worker"]
+        Ingestion["fa:fa-file-import Ingestion (OCR / Parsing)"]
+        Embed["fa:fa-brain Embedding Model"]
+  end
+ subgraph DOCKER["fab:fa-docker Docker Environment"]
+    direction TB
+        STORES
+        FE
+        BE
+        IDX
+        FS["fa:fa-folder Mounted Source Volume"]
+  end
+ subgraph ENV["fa:fa-sliders-h .env (abstract)"]
+    direction TB
+        ENV_MODE["fa:fa-toggle-on RETRIEVAL_MODE: hybrid / fts / vector"]
+        ENV_RERANK["fa:fa-toggle-on RERANK_ENABLED: true/false"]
+        ENV_OCR["fa:fa-toggle-on OCR_ENABLED: true/false"]
+        ENV_EMBED["fa:fa-toggle-on INDEX_EMBED_* (device / model / quant)"]
+  end
+    API --> Search & FileSvc & FileSvc
+    Indexer --- Ingestion
+    User --> UI
+    Agent -- MCP tool calls --> API
+    UI -- REST --> API
+    FileSvc -- read / write --> FS
+    FS -- changes --> Indexer
+    Ingestion -- parse + metadata / FTS --> SQLite
+    Ingestion --> Embed
+    Embed -- upsert vectors --> Qdrant
+    Search -- "keyword  - FTS" --> SQLite
+    Search -- vector --> Qdrant
+    SQLite --> Fusion
+    Qdrant --> Fusion
+    Fusion --> Perms
+    Perms --> Rerank
+    Rerank -- results --> API
+    Perms -- "results  - no rerank" --> API
+    Search -. "fallback to FTS-only" .-> SQLite
+    ENV_MODE --> Search
+    ENV_RERANK --> Rerank
+    ENV_OCR --> Ingestion
+    ENV_EMBED --> Embed
+     Qdrant:::stores
+     SQLite:::stores
+     UI:::ui
+     API:::be
+     Search:::be
+     Fusion:::be
+     Perms:::be
+     Rerank:::be
+     FileSvc:::be
+     Indexer:::idx
+     Ingestion:::idx
+     Embed:::idx
+     FS:::fs
+     ENV_MODE:::env
+     ENV_RERANK:::env
+     ENV_OCR:::env
+     ENV_EMBED:::env
+    classDef ui fill:#e6f3ff,stroke:#0066cc,stroke-width:2px,color:#002b55
+    classDef be fill:#e6fff2,stroke:#008040,stroke-width:2px,color:#003322
+    classDef idx fill:#fff2e6,stroke:#cc6600,stroke-width:2px,color:#5a2d00
+    classDef stores fill:#f2f2f2,stroke:#666,stroke-width:2px,color:#222
+    classDef env fill:#f7f1ff,stroke:#6b3fa0,stroke-width:2px,color:#2b1b47
+    classDef fs fill:#ffeef7,stroke:#b30059,stroke-width:2px,color:#4d0033
+    classDef docker fill:#f9f9ff,stroke:#333399,stroke-width:2px,color:#111144

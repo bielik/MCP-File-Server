@@ -29,8 +29,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       fetchWorkspaces: async () => {
         set({ isLoading: true, error: null })
         try {
-          const workspaces = await workspaceApi.getWorkspaces()
-          const activeWorkspace = workspaces.find(w => w.is_active) || null
+          const data = await workspaceApi.getWorkspaces()
+          const { workspaces, active_workspace_id } = data
+
+          // Find active workspace by ID from API response (more reliable than is_active flag)
+          const activeWorkspace = active_workspace_id
+            ? workspaces.find(w => w.id === active_workspace_id) || null
+            : workspaces.find(w => w.is_active) || null // Fallback to is_active flag
+
           set({ workspaces, activeWorkspace, isLoading: false })
         } catch (error) {
           const errorMessage = error instanceof WorkspaceApiError
@@ -138,6 +144,13 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
       // Permission actions
       fetchPermissions: async (workspaceId: number) => {
+        // Safety check: don't fetch permissions if no valid workspace ID
+        if (!workspaceId || workspaceId <= 0) {
+          console.warn('fetchPermissions called with invalid workspace ID:', workspaceId)
+          set({ permissions: [], isLoading: false })
+          return
+        }
+
         set({ isLoading: true, error: null })
         try {
           const permissions = await workspaceApi.getWorkspacePermissions(workspaceId)
@@ -202,6 +215,12 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
       // Batch operations
       getBatchEffectivePermissions: async (workspaceId: number, paths: string[]): Promise<EffectivePermissionResult[]> => {
+        // Safety check: don't fetch permissions if no valid workspace ID
+        if (!workspaceId || workspaceId <= 0) {
+          console.warn('getBatchEffectivePermissions called with invalid workspace ID:', workspaceId)
+          return []
+        }
+
         try {
           const response = await workspaceApi.getBatchEffectivePermissions(workspaceId, paths)
           return response.results

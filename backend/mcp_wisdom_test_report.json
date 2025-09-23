@@ -1,0 +1,53 @@
+{
+  "test_suite": "MCP Wisdom Comprehensive",
+  "timestamp": "2025-09-23T18:37:50.670011",
+  "environment": {
+    "workspace": "Test Workspace",
+    "readable_dirs": 0,
+    "writable_dirs": 0,
+    "denied_dirs": 0,
+    "available_files": 0
+  },
+  "results": {
+    "pre_validation": {
+      "services": "\u2705 All services running",
+      "workspace": "\u2705 Active workspace: Test Workspace",
+      "permissions": {
+        "readable": 0,
+        "writable": 0,
+        "denied": 0
+      }
+    },
+    "tool_tests": {
+      "tools_list": "\u2705 All expected tools available",
+      "get_search_statistics": "\u2705 Retrieved search statistics"
+    },
+    "permission_tests": {},
+    "security_tests": {
+      "directory_traversal": "\u2705 All 6 traversal attempts blocked",
+      "absolute_paths": "\u2705 All 4 absolute path attempts blocked"
+    },
+    "performance_tests": {
+      "response_time": "\u2705 Average response time: 0.013s"
+    }
+  },
+  "performance": {
+    "total_operations": 13,
+    "average_time": 0.013111279560969425,
+    "response_times": {
+      "tools/list_0": 0.004290342330932617,
+      "tools/list_1": 0.008983850479125977,
+      "read_file_2": 0.012605905532836914,
+      "read_file_3": 0.029825687408447266,
+      "read_file_4": 0.016625404357910156,
+      "read_file_5": 0.006574869155883789,
+      "read_file_6": 0.005355358123779297,
+      "read_file_7": 0.004975557327270508,
+      "read_file_8": 0.026326417922973633,
+      "read_file_9": 0.03116631507873535,
+      "read_file_10": 0.00536346435546875,
+      "read_file_11": 0.0048863887786865234,
+      "get_search_statistics_12": 0.013467073440551758
+    }
+  }
+}

@@ -70,19 +70,31 @@ def check_access(path: str, operation: str):
     Routes to appropriate service based on feature flags.
     """
     if _HAS_DATABASE_SUPPORT:
-        feature_flags = get_feature_flags()
-        if feature_flags.is_database_permissions_enabled():
-            # Use database-based service (Phase 3A)
-            is_allowed = db_check_access(path, operation)
-            if not is_allowed:
-                raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")
-            return True
-        elif feature_flags.is_config_permissions_enabled():
-            # Use config-based service (Phase 2)
-            is_allowed = config_check_access(path, operation)
-            if not is_allowed:
-                raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")
-            return True
+        try:
+            feature_flags = get_feature_flags()
+            if feature_flags.is_database_permissions_enabled():
+                # Use database-based service (Phase 3A)
+                if db_check_access is None:
+                    raise RuntimeError("db_check_access function is None")
+                is_allowed = db_check_access(path, operation)
+                if not is_allowed:
+                    raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")
+                return True
+            elif feature_flags.is_config_permissions_enabled():
+                # Use config-based service (Phase 2)
+                if config_check_access is None:
+                    raise RuntimeError("config_check_access function is None")
+                is_allowed = config_check_access(path, operation)
+                if not is_allowed:
+                    raise PermissionError(f"Operation '{operation}' is not permitted for path: {path}")
+                return True
+        except PermissionError:
+            # Permission was properly denied by the database service - re-raise
+            raise
+        except Exception as e:
+            # For Phase 4A, fall back to basic permission checking if database service fails
+            print(f"Database permission service error: {e}, falling back to basic permissions")
+            # Continue to legacy logic below
 
     # Legacy hardcoded logic
     if operation not in ['read', 'write']:

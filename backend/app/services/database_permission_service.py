@@ -41,7 +41,8 @@ class DatabasePermissionService:
         )
 
         # Allow dependency injection of session factory for testing
-        self.session_factory = session_factory or SessionLocal
+        # Store the injected factory, but use dynamic property for production
+        self._injected_session_factory = session_factory
 
         # Active workspace tracking
         self.active_workspace_id: Optional[int] = None
@@ -53,12 +54,40 @@ class DatabasePermissionService:
         # Load initial rules
         self._load_active_workspace_rules()
 
+    @property
+    def session_factory(self) -> Callable[[], Session]:
+        """
+        Dynamic session factory property that ensures database is initialized.
+
+        This prevents the NoneType error by always returning a valid session factory.
+        For testing, uses the injected factory. For production, ensures database init.
+        """
+        # Use injected factory for testing
+        if self._injected_session_factory is not None:
+            return self._injected_session_factory
+
+        # For production, ensure database is initialized
+        from app.database import SessionLocal, initialize_database
+
+        if SessionLocal is None:
+            logger.warning("SessionLocal was None, initializing database (self-heal path)")
+            initialize_database()
+            # Re-import after initialization
+            from app.database import SessionLocal
+
+        if SessionLocal is None:
+            raise RuntimeError("Database SessionLocal is still None after initialization - check database configuration")
+
+        return SessionLocal
+
     def _get_db_session(self) -> Session:
-        """Get a database session."""
-        session = self.session_factory()
-        # For testing scenarios, the session factory might return the same instance
-        # In that case, don't close it in finally blocks
-        return session
+        """Get a database session with proper error handling."""
+        try:
+            session = self.session_factory()
+            return session
+        except Exception as e:
+            logger.error(f"Failed to create database session: {e}")
+            raise RuntimeError(f"Database session creation failed: {e}")
 
     def _load_active_workspace_rules(self):
         """Load permission rules from the currently active workspace."""
@@ -494,10 +523,25 @@ _database_service = None
 
 
 def get_database_permission_service(session_factory: Optional[Callable[[], Session]] = None) -> DatabasePermissionService:
-    """Get the global database permission service instance."""
+    """
+    Get the global database permission service instance.
+
+    This function includes initialization guards to prevent the NoneType error.
+    """
     global _database_service
     if _database_service is None:
-        _database_service = DatabasePermissionService(session_factory=session_factory)
+        # FIX A: Guard DB initialization before creating the singleton
+        from app.database import SessionLocal, initialize_database
+        if SessionLocal is None:
+            logger.info("Database not initialized, initializing before creating permission service")
+            initialize_database()
+
+        factory = session_factory or SessionLocal
+        if factory is None:
+            # This should not happen after the guard above, but is a final safety check
+            raise RuntimeError("Database SessionLocal has not been initialized - check database configuration")
+
+        _database_service = DatabasePermissionService(session_factory=factory)
     return _database_service
 
 

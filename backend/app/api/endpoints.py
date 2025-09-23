@@ -19,7 +19,7 @@ from app.schemas.workspace import (
     WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse, WorkspaceListResponse,
     PermissionCreate, PermissionUpdate, PermissionResponse, PermissionListResponse,
     BatchEffectivePermissionsRequest, BatchEffectivePermissionsResponse, EffectivePermissionResult,
-    ErrorResponse, SuccessResponse
+    MatchedRuleInfo, ErrorResponse, SuccessResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -893,7 +893,8 @@ def batch_effective_permissions(
         return BatchEffectivePermissionsResponse(results=results)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
+        logger.error(f"Database permission service failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Permission service error: {e}")
 
 
 # Active Workspace Permissions (Helper API)

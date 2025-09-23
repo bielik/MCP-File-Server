@@ -10,18 +10,24 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from app.database import create_db_and_tables
+from app.database import create_db_and_tables, initialize_database
 from app.api.endpoints import router as api_router
+from app.api.indexer import router as indexer_router
 from app.api.websockets import ConnectionManager
 
 # Import MCP services and schemas
-from app.services import mcp_service, file_service
+from app.services import mcp_service, file_service, search_tools
 from app.schemas import mcp as mcp_schemas
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    create_db_and_tables()
+    # Startup - Initialize database with Phase 4A bootstrap
+    initialize_database()
+
+    # Reset any pre-created permission service singleton to ensure it uses the initialized database
+    from app.services.database_permission_service import reset_database_permission_service
+    reset_database_permission_service()
+
     yield
     # Shutdown
     pass
@@ -64,13 +70,37 @@ tool_map = {
     "read_file": file_service.read_file,
     "list_files": file_service.list_files,
     "write_file": file_service.write_file,
+    # Phase 4A Search Tools
+    "list_all_files": search_tools.list_all_files,
+    "search_files_by_metadata": search_tools.search_files_by_metadata,
+    "get_file_info": search_tools.get_file_info,
+    "get_search_statistics": search_tools.get_search_statistics,
 }
 
 app.include_router(api_router, prefix="/api")
+app.include_router(indexer_router)
 
 @app.get("/")
 def read_root():
     return {"message": "MCP KnowledgeExplorer Hub is running."}
+
+@app.get("/live")
+def liveness_probe():
+    """Liveness probe for health checks."""
+    return {"status": "ok", "service": "backend"}
+
+@app.get("/ready")
+def readiness_probe():
+    """Readiness probe for health checks."""
+    try:
+        # Test database connectivity
+        from app.database import get_db
+        with next(get_db()) as session:
+            session.execute("SELECT 1").fetchone()
+
+        return {"status": "ready", "service": "backend", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Service not ready: {e}")
 
 async def process_mcp_request(request_data: dict) -> dict:
     """Process an MCP JSON-RPC request and return the response."""

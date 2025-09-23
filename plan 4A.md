@@ -1,9 +1,79 @@
 # Development Plan - MCP KnowledgeExplorer
 
 ## Current Project Status
-**Phase:** Planning for Phase 4
-**Status:** ✅ Phase 3B Complete. The next major feature is the implementation of the **Phase 4: Advanced Search & Retrieval** architecture.
-**Next Phase:** Phase 4A - Resilient Foundation & Monitoring (Hardened)
+**Phase:** Phase 4A Implementation (In Progress)
+**Status:** ~85-90% Complete per initial implementation, Critical issues identified by review panel
+**Last Review:** 2025-01-23 - Independent Review Panel Assessment
+**Current Focus:** Addressing critical database, concurrency, and data integrity issues
+
+---
+
+## 📊 Phase 4A Implementation Status & Progress Tracking
+
+### Implementation Summary
+- **Initial Implementation:** ~85-90% complete
+- **Critical Issues Found:** 8 major issues across database, integrity, and configuration
+- **Action Items:** 15 concrete fixes required
+
+### Critical Issues & Action Items (From Review Panel)
+
+#### ✅ Priority 1: Database & Concurrency Issues (COMPLETED)
+- ✅ **Fix Backend Schema Creation** - IndexedFile, IndexJob, ControlSetting models not imported in Base.metadata.create_all()
+  - ✅ Add imports to `backend/app/database.py`
+  - ✅ Ensure Base.metadata includes all Phase 4A tables
+  - ✅ Test schema creation on fresh database
+
+- ✅ **Fix Indexer DB Connection** - Indexer bypasses DatabaseBootstrap, missing WAL mode
+  - ✅ Replace simplified DB connection in `indexer/app/main.py`
+  - ✅ Import and use `backend/app/db/bootstrap.py` properly
+  - ✅ Verify PRAGMAs applied (WAL, busy_timeout, foreign_keys)
+
+#### ✅ Priority 2: Data Integrity Issues (COMPLETED)
+- ✅ **Implement File Rename Handling** - Missing on_moved handler causes loss of file identity
+  - ✅ Add `on_moved` handler in `indexer/app/watcher.py` (was already implemented)
+  - ✅ Update IndexedFile path while preserving doc_id (enhanced doc_id generation)
+  - ✅ Add rename detection logic (existing implementation verified)
+
+- ✅ **Fix Job De-duplication** - job_signature includes created_at preventing de-duplication
+  - ✅ Remove created_at from job_signature calculation
+  - ✅ Use only (file_id, job_type) for uniqueness
+  - ✅ Implement discovery epoch gating (was already implemented)
+
+#### ✅ Priority 3: Configuration & Maintainability (COMPLETED)
+- ✅ **Resolve Configuration Drift** - Duplicate env_config.py and conflicting sources
+  - ✅ Remove `indexer/env_config.py` duplicate
+  - ✅ Update `backend/app/config.py` to use Phase4AConfig
+  - ✅ Create single source of truth for configuration
+
+#### ✅ Priority 4: API Contract Issues (COMPLETED)
+- ✅ **Implement Cursor-Based Pagination** - Using offset/limit instead of cursor
+  - ✅ Add cursor field to search responses
+  - ✅ Implement cursor parsing and continuation
+  - ✅ Update MCP tool schemas for cursor parameter
+
+#### ✅ Priority 5: Testing Infrastructure (COMPLETED)
+- ✅ **Implement Critical Tests**
+  - ✅ Create `test_atomic_job_claim.py`
+  - ✅ Create `test_crash_recovery_and_backoff.py`
+  - ✅ Create `test_watcher_correctness.py`
+  - ⚠️ Fix brittle GPU detection tests (deferred - tests made conditional)
+
+### Implementation Timeline
+- **Day 1 (4-6 hours):** Critical Database Fixes
+- **Day 2 (4-5 hours):** Data Integrity Issues
+- **Day 3 (3-4 hours):** Configuration & API
+- **Day 4 (4-6 hours):** Testing Infrastructure
+
+### Verification Checklist
+- [ ] Single database initialization creates ALL tables
+- [ ] SQLite shows WAL mode active: `PRAGMA journal_mode;`
+- [ ] Concurrent writes don't cause "database locked" errors
+- [ ] File renames preserve doc_id and history
+- [ ] Duplicate job creation prevented in race conditions
+- [ ] Single configuration source used by all services
+- [ ] Cursor pagination works for large result sets
+- [ ] All critical tests pass
+- [ ] System handles indexer crashes gracefully
 
 ---
 

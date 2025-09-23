@@ -50,6 +50,127 @@ def get_tools() -> List[mcp_schemas.ToolDefinition]:
                 },
                 "required": ["path", "content"]
             }
+        ),
+
+        # Phase 4A Search Tools
+        mcp_schemas.ToolDefinition(
+            name="list_all_files",
+            description="Lists all discoverable files and directories within the workspace scope, with optional depth control and pagination.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of files to return (default: 1000, max: 5000)",
+                        "default": 1000,
+                        "minimum": 1,
+                        "maximum": 5000
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of files to skip for pagination (default: 0, used when cursor is not provided)",
+                        "default": 0,
+                        "minimum": 0
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Base64-encoded cursor for efficient pagination (preferred over offset)"
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "Maximum directory depth to traverse (optional)",
+                        "minimum": 1
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "description": "Field to sort by: 'path', 'size', 'mtime', or 'discovered'",
+                        "enum": ["path", "size", "mtime", "discovered"],
+                        "default": "path"
+                    }
+                },
+                "required": []
+            }
+        ),
+
+        mcp_schemas.ToolDefinition(
+            name="search_files_by_metadata",
+            description="Searches for files based on metadata properties like filename patterns, file types, size, and modification date.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "filename_pattern": {
+                        "type": "string",
+                        "description": "Pattern to match against filenames (supports * and ? wildcards)"
+                    },
+                    "file_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of file extensions to include (e.g., ['.txt', '.pdf', '.md'])"
+                    },
+                    "size_min": {
+                        "type": "integer",
+                        "description": "Minimum file size in bytes",
+                        "minimum": 0
+                    },
+                    "size_max": {
+                        "type": "integer",
+                        "description": "Maximum file size in bytes",
+                        "minimum": 0
+                    },
+                    "mtime_after": {
+                        "type": "integer",
+                        "description": "Files modified after this Unix timestamp"
+                    },
+                    "mtime_before": {
+                        "type": "integer",
+                        "description": "Files modified before this Unix timestamp"
+                    },
+                    "indexed_only": {
+                        "type": "boolean",
+                        "description": "If true, only return files that have been indexed",
+                        "default": False
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 100, max: 1000)",
+                        "default": 100,
+                        "minimum": 1,
+                        "maximum": 1000
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of results to skip for pagination (default: 0)",
+                        "default": 0,
+                        "minimum": 0
+                    }
+                },
+                "required": []
+            }
+        ),
+
+        mcp_schemas.ToolDefinition(
+            name="get_file_info",
+            description="Get detailed information about a specific file by its document ID.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "doc_id": {
+                        "type": "string",
+                        "description": "Document ID of the file to get information about"
+                    }
+                },
+                "required": ["doc_id"]
+            }
+        ),
+
+        mcp_schemas.ToolDefinition(
+            name="get_search_statistics",
+            description="Get comprehensive statistics about the indexed files and search capabilities.",
+            input_schema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
         )
     ]
     return tools

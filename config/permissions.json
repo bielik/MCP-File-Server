@@ -1,0 +1,64 @@
+{
+  "$schema": {
+    "title": "Permission Configuration Schema",
+    "description": "Schema for MCP KnowledgeExplorer permission rules",
+    "version": "1.0.0"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "auto-generated",
+    "description": "Default permission configuration - PLEASE CUSTOMIZE FOR YOUR NEEDS"
+  },
+  "rules": [
+    {
+      "id": "default-materials-read",
+      "path": "materials",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Default read access to materials directory",
+      "created_at": "auto-generated"
+    },
+    {
+      "id": "default-projects-read",
+      "path": "projects",
+      "permission_type": "read",
+      "rule_type": "allow",
+      "description": "Default read access to projects directory",
+      "created_at": "auto-generated"
+    },
+    {
+      "id": "default-projects-write",
+      "path": "projects",
+      "permission_type": "write",
+      "rule_type": "allow",
+      "description": "Default write access to projects directory",
+      "created_at": "auto-generated"
+    }
+  ],
+  "precedence_rules": {
+    "description": "Formal precedence rules for permission resolution",
+    "rules": [
+      "1. Specificity: A rule on a child path is more specific than a rule on a parent path",
+      "2. Tie-Breaker: For rules of equal specificity, deny wins over allow",
+      "3. Implied Permissions: A write permission implicitly grants read",
+      "4. Default: If no rule matches, access is denied"
+    ]
+  },
+  "validation": {
+    "required_fields": [
+      "id",
+      "path",
+      "permission_type",
+      "rule_type"
+    ],
+    "valid_permission_types": [
+      "read",
+      "write"
+    ],
+    "valid_rule_types": [
+      "allow",
+      "deny"
+    ],
+    "path_format": "Relative paths within /shared-fs mount point"
+  }
+}

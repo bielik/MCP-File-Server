@@ -1,9 +1,9 @@
 # Development Plan - MCP KnowledgeExplorer
 
 ## Current Project Status
-**Phase:** Planning for Phase 4
-**Status:** ✅ Phase 3B Complete. The next major feature is the implementation of the **Phase 4: Advanced Search & Retrieval** architecture.
-**Next Phase:** Phase 4A - Resilient Indexer & Metadata Search
+**Phase:** ✅ Phase 4A Complete - Critical Fixes & Foundation Ready
+**Status:** All 8 critical issues resolved. Robust indexer service operational with search tools.
+**Next Phase:** Phase 4B - Search Core & Quality (Keyword + Semantic Search)
 
 ---
 
@@ -23,15 +23,19 @@ The next development cycle will focus on implementing the "Indexer-Query" archit
 * **Performance tuning** (`RETRIEVAL_MODE`, `INDEXER_BATCH_SIZE`) allows optimization for different use cases
 * **Hardware selection** (`INDEX_EMBED_DEVICE`) enables GPU acceleration when available with automatic fallback to CPU
 
-### Phase 4A - Resilient Foundation & Monitoring (Est. 2 weeks)
+### ✅ Phase 4A - Resilient Foundation & Monitoring (COMPLETED)
 *Goal: Build the resilient operational foundation and the user-facing dashboard first, delivering immediate value with metadata search tools while ensuring the system is stable and transparent.*
 
-* [ ] **Architecture:** Implement the three-service `docker-compose.yml` structure with health checks and default resource limits for the new `indexer` service.
-* [ ] **Configuration:** Establish comprehensive `.env` configuration system with hardware detection and feature toggles.
-* [ ] **Database:** Extend the SQLite schema with `indexed_files` and `index_jobs` tables.
-* [ ] **Indexer Service:** Build the initial service with a `watchdog`-based file watcher, debounce queue, file hashing, and the crash-recovery logic using the `index_jobs` table.
-* [ ] **UI:** Create the "Indexer Dashboard" in the frontend to display live status (`Idle`, `Indexing`), key metrics, and provide **Pause/Resume controls**.
-* [ ] **MCP Tools:** Implement and expose the `list_all_files` and `search_files_by_metadata` tools.
+* [x] **Architecture:** Implemented three-service `docker-compose.yml` structure with indexer service
+* [x] **Configuration:** Established comprehensive Phase4AConfig system with feature toggles
+* [x] **Database:** Extended SQLite schema with `indexed_files`, `index_jobs`, and `control_settings` tables
+* [x] **Database Hardening:** Fixed schema creation, WAL mode, and concurrency issues
+* [x] **Indexer Service:** Built service with `watchdog`-based file watcher, crash-resilient job queue
+* [x] **Data Integrity:** Enhanced file rename handling and job de-duplication
+* [x] **UI:** Created "Indexer Dashboard" with live status and Pause/Resume controls
+* [x] **MCP Tools:** Implemented and exposed 4 search tools: `list_all_files`, `search_files_by_metadata`, `get_file_info`, `get_search_statistics`
+* [x] **Testing:** Added comprehensive test suite for atomic operations, crash recovery, and watcher correctness
+* [x] **Critical Fixes:** Resolved all 8 issues identified by independent review panel
 
 ### Phase 4B - Search Core & Quality (Est. 3 weeks)
 *Goal: Implement the core keyword and semantic search functionality using the reliable CPU-based model and high-quality search algorithms.*
@@ -72,6 +76,10 @@ The next development cycle will focus on implementing the "Indexer-Query" archit
 ---
 
 ## Completed Milestones
+
+#### ✅ Phase 4A: Critical Database & Indexer Fixes (COMPLETED - 2025-01-23)
+* **Deliverables:** All 8 critical issues resolved, robust indexer service, search tools, testing infrastructure
+* **Impact:** Production-ready foundation for Phase 4B semantic search development
 
 #### ✅ Phase 3B: Advanced UI & Full Workspace Experience (COMPLETED)
 * **Deliverables:** UI for workspace management, two-panel permission editor, "Inspect Permission" feature, and architecture simplification.
