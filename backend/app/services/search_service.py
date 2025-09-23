@@ -104,23 +104,29 @@ class SearchService:
             # Build query for indexed files
             query = session.query(IndexedFile)
 
-            # Apply sorting and cursor filtering
+            # Apply consistent sorting first (before any filters/pagination)
+            if sort_by == "size":
+                query = query.order_by(desc(IndexedFile.size_bytes), IndexedFile.id)
+            elif sort_by == "mtime":
+                query = query.order_by(desc(IndexedFile.mtime_epoch), IndexedFile.id)
+            elif sort_by == "discovered":
+                query = query.order_by(desc(IndexedFile.discovered_at), IndexedFile.id)
+            else:  # Default to path
+                query = query.order_by(IndexedFile.path, IndexedFile.id)
+
+            # Apply cursor filtering (after sorting)
             if cursor:
                 # Decode cursor to get last value
                 cursor_value = self._decode_cursor(cursor, sort_by)
                 if cursor_value:
                     if sort_by == "size":
                         query = query.filter(IndexedFile.size_bytes < cursor_value)
-                        query = query.order_by(desc(IndexedFile.size_bytes), IndexedFile.id)
                     elif sort_by == "mtime":
                         query = query.filter(IndexedFile.mtime_epoch < cursor_value)
-                        query = query.order_by(desc(IndexedFile.mtime_epoch), IndexedFile.id)
                     elif sort_by == "discovered":
                         query = query.filter(IndexedFile.discovered_at < cursor_value)
-                        query = query.order_by(desc(IndexedFile.discovered_at), IndexedFile.id)
                     else:  # Default to path
                         query = query.filter(IndexedFile.path > cursor_value)
-                        query = query.order_by(IndexedFile.path, IndexedFile.id)
                 else:
                     # Invalid cursor, fall back to offset
                     logger.warning(f"Invalid cursor provided: {cursor}, falling back to offset")
@@ -128,17 +134,6 @@ class SearchService:
             else:
                 # Use offset-based pagination as fallback
                 query = query.offset(offset)
-
-            # Apply consistent sorting
-            if not cursor:  # Only apply base sorting if not using cursor
-                if sort_by == "size":
-                    query = query.order_by(desc(IndexedFile.size_bytes), IndexedFile.id)
-                elif sort_by == "mtime":
-                    query = query.order_by(desc(IndexedFile.mtime_epoch), IndexedFile.id)
-                elif sort_by == "discovered":
-                    query = query.order_by(desc(IndexedFile.discovered_at), IndexedFile.id)
-                else:  # Default to path
-                    query = query.order_by(IndexedFile.path, IndexedFile.id)
 
             # Apply limit (+1 to check if there are more results)
             files = query.limit(limit + 1).all()

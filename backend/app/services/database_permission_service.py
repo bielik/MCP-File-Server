@@ -382,12 +382,18 @@ class DatabasePermissionService:
         if norm_user_path.startswith(('..', '/')):
             raise PermissionError(f"Path cannot be absolute or contain '..': {user_path}")
 
+        # Container-aware path detection (same as indexer fix)
+        if os.path.exists('/source'):
+            base_path = '/source'  # Container path
+        else:
+            base_path = self.config.SHARED_FS_PATH  # Local development
+
         # Join with the base path
-        full_path = os.path.join(self.config.SHARED_FS_PATH, norm_user_path)
+        full_path = os.path.join(base_path, norm_user_path)
 
         # Resolve the absolute path and ensure it's within the shared directory
         abs_path = os.path.abspath(full_path)
-        abs_shared_fs = os.path.abspath(self.config.SHARED_FS_PATH)
+        abs_shared_fs = os.path.abspath(base_path)
 
         if not abs_path.startswith(abs_shared_fs):
             raise PermissionError(f"Access denied: Path '{user_path}' is outside the allowed shared directory.")

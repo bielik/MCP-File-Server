@@ -58,6 +58,20 @@ def initialize_database():
 
         SessionLocal = create_session_factory(engine)
 
+        # Ensure Phase 4A schema is created by importing and creating all tables
+        try:
+            # Import all models to register them with SQLAlchemy metadata
+            import sys
+            sys.path.insert(0, '/backend/app')
+            from database import Base
+
+            # Create all tables (will only create missing ones)
+            Base.metadata.create_all(bind=engine)
+            logger.info("Phase 4A database schema verified/created")
+
+        except Exception as e:
+            logger.warning(f"Schema creation warning (may already exist): {e}")
+
         logger.info("Database initialized with WAL mode and concurrency settings")
 
         # Log database info to verify proper configuration
@@ -132,14 +146,23 @@ class IndexerService:
             # Initialize database
             initialize_database()
 
-            # Start file watcher
+            # Start file watcher with container-aware path detection
             if self.config.SHARED_FS_PATH:
+                # Detect container environment and use correct path
+                import os
+                if os.path.exists('/source'):
+                    watch_path = '/source'  # Container path
+                    logger.info("Using container path /source for file watching")
+                else:
+                    watch_path = self.config.SHARED_FS_PATH  # Local development
+                    logger.info(f"Using local development path: {watch_path}")
+
                 self.file_watcher = FileWatcher(
-                    source_path=self.config.SHARED_FS_PATH,
+                    source_path=watch_path,
                     config=self.config
                 )
                 self.file_watcher.start()
-                logger.info(f"File watcher started for: {self.config.SHARED_FS_PATH}")
+                logger.info(f"File watcher started for: {watch_path}")
 
             # Perform startup recovery
             await self._startup_recovery()
