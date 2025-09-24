@@ -461,3 +461,150 @@ DEFAULT_CONTROL_SETTINGS = {
         "description": "Current file discovery epoch for preventing duplicates"
     }
 }
+
+
+class DocumentChunk(Base):
+    """
+    Represents a text chunk from a document for Phase 4B search functionality.
+
+    This model stores text content that has been extracted and chunked from
+    indexed files. Each chunk is a segment of text that can be embedded for
+    semantic search and indexed for full-text search.
+    """
+    __tablename__ = "document_chunks"
+
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Foreign key to IndexedFile
+    file_id = Column(Integer, ForeignKey("indexed_files.id"), nullable=False, index=True)
+
+    # Chunk ordering and position
+    ordinal = Column(Integer, nullable=False, index=True)  # Chunk order within file (0-based)
+
+    # Content
+    text = Column(Text, nullable=False)  # The actual text content of the chunk
+
+    # Byte position in original file
+    start_byte = Column(Integer, nullable=False)  # Starting byte position
+    end_byte = Column(Integer, nullable=False)    # Ending byte position
+
+    # Metadata and processing
+    word_count = Column(Integer, nullable=True)   # Number of words in chunk
+    char_count = Column(Integer, nullable=True)   # Number of characters in chunk
+
+    # Processing timestamps
+    created_at = Column(Integer, nullable=False, index=True)
+    updated_at = Column(Integer, nullable=False)
+
+    # Embedding metadata (for Phase 4B)
+    has_embedding = Column(Boolean, default=False, nullable=False, index=True)
+    embedding_model = Column(String(128), nullable=True)  # Model used for embedding
+    embedding_version = Column(String(16), nullable=True)  # Version of embedding logic
+
+    # Relationships
+    file = relationship("IndexedFile", backref="chunks")
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_file_ordinal', 'file_id', 'ordinal'),  # For retrieving chunks in order
+        Index('idx_file_position', 'file_id', 'start_byte', 'end_byte'),  # For position-based queries
+        Index('idx_embedding_status', 'has_embedding', 'created_at'),  # For finding unembedded chunks
+        {}, # Required empty dict at end for SQLAlchemy
+    )
+
+    def __init__(self, file_id: int, ordinal: int, text: str, start_byte: int, end_byte: int, **kwargs):
+        """
+        Initialize DocumentChunk with computed values.
+
+        Args:
+            file_id: ID of the parent indexed file
+            ordinal: Order of chunk within the file (0-based)
+            text: Text content of the chunk
+            start_byte: Starting byte position in original file
+            end_byte: Ending byte position in original file
+            **kwargs: Additional model fields
+        """
+        super().__init__(**kwargs)
+        self.file_id = file_id
+        self.ordinal = ordinal
+        self.text = text
+        self.start_byte = start_byte
+        self.end_byte = end_byte
+
+        # Compute text statistics
+        self.word_count = len(text.split()) if text else 0
+        self.char_count = len(text) if text else 0
+
+        # Set timestamps
+        now = int(datetime.utcnow().timestamp())
+        self.created_at = now
+        self.updated_at = now
+
+    def update_text(self, new_text: str) -> None:
+        """
+        Update chunk text content and recompute statistics.
+
+        Args:
+            new_text: New text content for the chunk
+        """
+        self.text = new_text
+        self.word_count = len(new_text.split()) if new_text else 0
+        self.char_count = len(new_text) if new_text else 0
+        self.updated_at = int(datetime.utcnow().timestamp())
+
+        # Reset embedding status since content changed
+        self.has_embedding = False
+        self.embedding_model = None
+        self.embedding_version = None
+
+    def mark_embedded(self, model_name: str, version: str) -> None:
+        """
+        Mark chunk as having been embedded.
+
+        Args:
+            model_name: Name of the embedding model used
+            version: Version of the embedding logic/model
+        """
+        self.has_embedding = True
+        self.embedding_model = model_name
+        self.embedding_version = version
+        self.updated_at = int(datetime.utcnow().timestamp())
+
+    def needs_embedding(self, current_model: str, current_version: str) -> bool:
+        """
+        Check if chunk needs embedding or re-embedding.
+
+        Args:
+            current_model: Current embedding model being used
+            current_version: Current embedding logic version
+
+        Returns:
+            True if embedding is needed
+        """
+        return (
+            not self.has_embedding or
+            self.embedding_model != current_model or
+            self.embedding_version != current_version
+        )
+
+    def get_preview(self, max_chars: int = 100) -> str:
+        """
+        Get a preview of the chunk text.
+
+        Args:
+            max_chars: Maximum number of characters to return
+
+        Returns:
+            Truncated text with ellipsis if needed
+        """
+        if not self.text:
+            return ""
+
+        if len(self.text) <= max_chars:
+            return self.text
+
+        return self.text[:max_chars-3] + "..."
+
+    def __repr__(self):
+        return f"<DocumentChunk(id={self.id}, file_id={self.file_id}, ordinal={self.ordinal}, chars={self.char_count})>"

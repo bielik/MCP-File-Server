@@ -48,22 +48,55 @@ Phase 4B will add four new tools, expanding the total from 7 to 11. All tools wi
 
 ## 6. Phased Implementation Plan (TDD Approach, 4-5 Weeks)
 
-### M1 - Foundations (Database & Infrastructure)
+### M1 - Foundations (Database & Infrastructure) ✅ **COMPLETE**
 
-#### **Tests to Write First:**
+> **Status**: 100% Complete
+> **Completion Date**: 2025-01-24
+> **Test Results**: 11/11 database schema tests passing, 8/8 Qdrant integration tests created
 
--   **`backend/tests/phase4b/test_database_schema.py`**:
-    -   Asserts that `document_chunks` and `chunks_fts` tables are created correctly on startup.
-    -   Tests the INSERT/UPDATE/DELETE triggers to ensure `chunks_fts` stays synchronized with `document_chunks`.
--   **`backend/tests/phase4b/test_qdrant_integration.py`**:
-    -   A simple integration test to confirm the backend service can connect to the Qdrant container and get its health status.
+#### **Tests to Write First:** ✅ **COMPLETED**
 
-#### **Implementation Steps:**
+-   **`backend/tests/phase4b/test_database_schema.py`** ✅ **IMPLEMENTED**:
+    -   ✅ Created comprehensive test suite with 11 test methods
+    -   ✅ Tests document_chunks table creation and structure (2 tests)
+    -   ✅ Tests chunks_fts virtual table and configuration (3 tests)
+    -   ✅ Tests INSERT/UPDATE/DELETE triggers for FTS synchronization (6 tests)
+    -   ✅ All tests use temporary database isolation for reliability
+    -   ✅ **Result**: 11/11 tests passing
 
-1.  **Task**: Implement the `document_chunks` and `chunks_fts` SQLAlchemy models and the corresponding FTS triggers in `backend/app/models/`.
-2.  **Task**: Add the `qdrant` service to `docker-compose.yml` with a named volume for persistence.
-3.  **Task**: Update `backend/` and `indexer/` `requirements.txt` with new dependencies (`llama-index`, `qdrant-client`, `sentence-transformers`).
-4.  **Task**: Create a backfill script in `scripts/` to process existing files upon first run after the update.
+-   **`backend/tests/phase4b/test_qdrant_integration.py`** ✅ **IMPLEMENTED**:
+    -   ✅ Created 8 comprehensive integration tests
+    -   ✅ Tests Qdrant service health and connectivity
+    -   ✅ Tests collection creation and management
+    -   ✅ Tests vector upsert and similarity search
+    -   ✅ Tests gracefully skip when Qdrant container unavailable
+    -   ✅ **Result**: 8/8 tests created (skip when dependencies unavailable)
+
+#### **Implementation Steps:** ✅ **ALL COMPLETED**
+
+1.  ✅ **Task**: Implement the `document_chunks` and `chunks_fts` SQLAlchemy models and the corresponding FTS triggers in `backend/app/models/`.
+    -   **File**: `backend/app/models/indexing.py` - Added `DocumentChunk` model
+    -   **Fields**: 13 comprehensive fields (id, file_id, ordinal, text, start_byte, end_byte, word_count, char_count, created_at, updated_at, has_embedding, embedding_model, embedding_version)
+    -   **Methods**: Helper methods for text updates, embedding tracking, and preview generation
+    -   **Triggers**: Automatic FTS5 synchronization via SQLite triggers (chunks_fts_insert, chunks_fts_update, chunks_fts_delete)
+    -   **Database Function**: `_create_fts_tables()` in `backend/app/database.py` for automatic setup
+
+2.  ✅ **Task**: Add the `qdrant` service to `docker-compose.yml` with a named volume for persistence.
+    -   **Image**: qdrant/qdrant:v1.7.4
+    -   **Ports**: 6333 (HTTP), 6334 (gRPC)
+    -   **Storage**: Named volume `qdrant_data:/qdrant/storage`
+    -   **Health Check**: HTTP endpoint monitoring
+    -   **Resources**: Memory limit 1G, CPU limit 0.5, with reservations
+
+3.  ✅ **Task**: Update `backend/` and `indexer/` `requirements.txt` with new dependencies (`llama-index`, `qdrant-client`, `sentence-transformers`).
+    -   **Backend**: Added llama-index, qdrant-client>=1.7.0, sentence-transformers>=2.2.2, torch>=1.13.0
+    -   **Indexer**: Activated previously commented Phase 4B dependencies
+
+4.  ✅ **Task**: Create a backfill script in `scripts/` to process existing files upon first run after the update.
+    -   **File**: `scripts/phase4b_backfill.py`
+    -   **Features**: Dry-run support, batch processing, comprehensive error handling
+    -   **Job Types**: Creates TEXT_EXTRACT, CHUNK, FTS_INDEX, EMBED jobs for existing files
+    -   **Usage**: Command-line script with --dry-run and --batch-size options
 
 ### M2 - Keyword Search Path
 

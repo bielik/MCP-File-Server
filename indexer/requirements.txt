@@ -16,11 +16,11 @@ pathlib2==2.3.7
 psutil==5.9.6
 requests==2.32.5
 
-# For future ML integration (Phase 4B)
-# sentence-transformers==2.2.2
-# qdrant-client==1.7.0
-# llama-index==0.9.14
-# torch>=1.13.0
+# Phase 4B ML integration (now active)
+sentence-transformers==2.2.2
+qdrant-client==1.7.0
+llama-index==0.9.14
+torch>=1.13.0
 
 # OCR capabilities (conditional)
 # pytesseract==0.3.10

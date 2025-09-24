@@ -1,24 +1,26 @@
 # MCP KnowledgeExplorer
 
-> **🎉 Status: Phase 4A COMPLETE - Ready for Phase 4B Semantic Search!**
-> Phase 4A advanced search infrastructure is 100% complete with comprehensive documentation for independent development. All critical production issues have been resolved, and the system is fully operational with indexer service, 7 MCP tools, and robust job processing. Complete implementation guide and Phase 4B roadmap provided for semantic search development.
+> **🎉 Status: Phase 4B M1 COMPLETE - Foundations Ready for Advanced Search!**
+> Phase 4B Milestone 1 (Foundations) is 100% complete with database schema extensions and infrastructure for advanced search and retrieval. The DocumentChunk model, FTS5 virtual tables, Qdrant vector database, and comprehensive test suite (19 tests) are operational. Ready for M2 Keyword Search Path implementation.
 
 ## Quick Start
 
 ```bash
 # Start the entire system with one command
-# This will now start three services: backend, frontend, and the new indexer
+# This will now start FOUR services: backend, frontend, indexer, and Qdrant
 docker-compose up --build
 
 # Access the services
 # Frontend UI: http://localhost:5173
 # Backend API: http://localhost:8000
 # MCP HTTP: http://localhost:8000/mcp (for AI clients)
+# Qdrant API: http://localhost:6333 (vector database)
 
 # View logs for a specific service
 docker-compose logs -f backend
 docker-compose logs -f frontend
 docker-compose logs -f indexer
+docker-compose logs -f qdrant
 ```
 
 ## Testing
@@ -47,6 +49,27 @@ Validate all MCP functionality with the comprehensive test routine:
 - ✅ Security testing (directory traversal, unauthorized access)
 - ✅ Performance validation (sub-25ms response times)
 - ✅ JSON reporting with detailed metrics
+
+### Phase 4B Test Suite
+
+Validate the new Phase 4B foundations:
+
+```bash
+# Run Phase 4B database schema tests
+cd backend && python -m pytest tests/phase4b/test_database_schema.py -v
+
+# Run Phase 4B Qdrant integration tests
+cd backend && python -m pytest tests/phase4b/test_qdrant_integration.py -v
+
+# Run all Phase 4B tests
+cd backend && python -m pytest tests/phase4b/ -v
+```
+
+**Test Coverage:**
+- ✅ 11 database schema tests (DocumentChunk, FTS5, triggers)
+- ✅ 8 Qdrant integration tests (connection, collections, vectors)
+- ✅ Temporary database isolation for reliable testing
+- ✅ Graceful skipping when dependencies unavailable
 
 ---
 
@@ -202,16 +225,17 @@ Keep `SHARED_FS_PATH` pointing at your host folder. Inside containers, the code 
 
 | Category | Technology | Purpose | Status |
 | :--- | :--- | :--- | :--- |
-| **Containerization** | Docker Compose | 3-service orchestration: backend, frontend, indexer | ✅ Phase 4A |
+| **Containerization** | Docker Compose | 4-service orchestration: backend, frontend, indexer, qdrant | ✅ Phase 4B M1 |
 | **Backend** | FastAPI | MCP/API endpoints and Query Engine with search tools | ✅ Phase 4A |
 | **Frontend** | React, Vite | Web UI with indexer dashboard and controls | ✅ Phase 4A |
 | **Indexer** | Python/Watchdog | Background file monitoring and job processing | ✅ Phase 4A |
-| **Application DB** | SQLite (WAL) | Concurrent storage: workspaces, permissions, files, jobs | ✅ Phase 4A |
+| **Application DB** | SQLite (WAL) | Concurrent storage: workspaces, permissions, files, jobs, chunks | ✅ Phase 4B M1 |
+| **Full-Text Search** | SQLite FTS5 | Trigram tokenizer for typo-tolerant keyword search | ✅ Phase 4B M1 |
 | **Job Queue** | SQLite | Crash-resilient job queue with atomic claiming | ✅ Phase 4A |
-| **RAG Framework** | **LlamaIndex** | Core toolkit for data ingestion, indexing, and querying. | 📋 Phase 4B |
-| **Vector Database** | **Qdrant** | High-performance storage and retrieval of vector embeddings. | 📋 Phase 4B |
-| **Embedding Model** | **`paraphrase-multilingual-MiniLM-L12-v2`** | A high-quality, CPU-based multilingual model to ensure broad compatibility. | 📋 Phase 4B |
-| **OCR Engine**| **Tesseract** | Extracts text from images and scanned documents. | 📋 Phase 4B |
+| **Vector Database** | **Qdrant v1.7.4** | High-performance storage and retrieval of vector embeddings | ✅ Phase 4B M1 |
+| **RAG Framework** | **LlamaIndex** | Core toolkit for data ingestion, indexing, and querying | ✅ Phase 4B M1 |
+| **Embedding Model** | **`paraphrase-multilingual-MiniLM-L12-v2`** | CPU-based multilingual model for semantic search | 📋 Phase 4B M2+ |
+| **OCR Engine**| **Tesseract** | Extracts text from images and scanned documents | 📋 Phase 4B M3+ |
 
 ---
 

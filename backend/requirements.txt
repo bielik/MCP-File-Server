@@ -9,3 +9,9 @@ watchdog
 pydantic-settings
 httpx
 requests
+
+# Phase 4B dependencies for advanced search and retrieval
+llama-index
+qdrant-client>=1.7.0
+sentence-transformers>=2.2.2
+torch>=1.13.0

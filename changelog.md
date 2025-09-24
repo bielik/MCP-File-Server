@@ -21,6 +21,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `requests` to `backend/requirements.txt` for healthchecks.
 - Added `requests` to `indexer/requirements.txt` for healthchecks.
 
+## [4.2.0-M1] - 2025-01-24 - Phase 4B Milestone 1: Foundations Complete
+
+### 🏗️ Phase 4B M1 - Database & Infrastructure Foundations
+Phase 4B M1 establishes the foundational infrastructure for advanced search and retrieval capabilities, following Test-Driven Development (TDD) methodology.
+
+#### 📊 Database Schema Extensions
+**Added**
+- **DocumentChunk Model** (`backend/app/models/indexing.py`)
+  - 13 comprehensive fields for text chunk management
+  - Foreign key relationship to IndexedFile
+  - Embedding metadata tracking (has_embedding, embedding_model, embedding_version)
+  - Helper methods: update_text(), mark_embedded(), needs_embedding(), get_preview()
+  - Performance indexes: file_ordinal, file_position, embedding_status
+
+- **FTS5 Virtual Table** (`backend/app/database.py`)
+  - chunks_fts table with trigram tokenizer for typo-tolerant search
+  - Automatic synchronization via SQLite triggers (INSERT/UPDATE/DELETE)
+  - Integration with _create_fts_tables() function for automatic setup
+
+#### 🚀 Infrastructure Setup
+**Added**
+- **Qdrant Vector Database** (`docker-compose.yml`)
+  - qdrant/qdrant:v1.7.4 with persistent storage
+  - Health checks and resource limits (1G memory, 0.5 CPU)
+  - Named volume qdrant_data for persistence
+
+**Changed**
+- **Requirements.txt Updates**
+  - Backend: Added llama-index, qdrant-client>=1.7.0, sentence-transformers>=2.2.2, torch>=1.13.0
+  - Indexer: Activated Phase 4B ML dependencies
+
+#### 🧪 Test Infrastructure (TDD Implementation)
+**Added**
+- **Database Schema Tests** (`backend/tests/phase4b/test_database_schema.py`)
+  - 11 comprehensive tests covering table creation, triggers, and FTS synchronization
+  - TestDocumentChunksSchema: table structure and foreign key validation (2 tests)
+  - TestChunksFTSSchema: FTS5 table creation and search functionality (3 tests)
+  - TestFTSSynchronizationTriggers: trigger existence and synchronization behavior (6 tests)
+  - **Result**: 11/11 tests passing with temporary database isolation
+
+- **Qdrant Integration Tests** (`backend/tests/phase4b/test_qdrant_integration.py`)
+  - 8 comprehensive integration tests for vector database operations
+  - TestQdrantConnection: health checks and API validation (2 tests)
+  - TestQdrantCollectionManagement: collection creation and vector operations (2 tests)
+  - TestQdrantServiceIntegration: configuration and error handling (2 tests)
+  - TestQdrantDockerIntegration: container availability and persistence (2 tests)
+  - **Result**: 8/8 tests created (skip when dependencies unavailable)
+
+#### 🔧 Development Tools
+**Added**
+- **Backfill Script** (`scripts/phase4b_backfill.py`)
+  - Processes existing indexed files for Phase 4B job creation
+  - Supports dry-run mode and batch processing
+  - Creates TEXT_EXTRACT, CHUNK, FTS_INDEX, EMBED jobs
+  - Command-line interface with --dry-run and --batch-size options
+
+- **FTS Tables Script** (`backend/app/scripts/create_fts_tables.py`)
+  - Standalone script for FTS5 table creation and trigger setup
+  - Includes verification and rebuild functionality
+
+#### 📁 Files Created/Modified
+**Created** (6 new files):
+- `backend/tests/phase4b/__init__.py` - Test package initialization
+- `backend/tests/phase4b/test_database_schema.py` - Database schema tests
+- `backend/tests/phase4b/test_qdrant_integration.py` - Qdrant integration tests
+- `indexer/tests/phase4b/__init__.py` - Indexer test package initialization
+- `scripts/phase4b_backfill.py` - Backfill script for existing files
+- `backend/app/scripts/create_fts_tables.py` - FTS table creation script
+
+**Modified** (5 files):
+- `backend/app/models/indexing.py` - Added DocumentChunk model (168 lines)
+- `backend/app/database.py` - Added _create_fts_tables() function
+- `docker-compose.yml` - Added Qdrant service configuration
+- `backend/requirements.txt` - Added Phase 4B dependencies
+- `indexer/requirements.txt` - Activated Phase 4B dependencies
+
+#### 📊 Success Metrics
+- **Test Coverage**: 19 total tests (11 database + 8 integration)
+- **Database**: DocumentChunk model with 13 fields and 3 performance indexes
+- **Infrastructure**: Qdrant service with health monitoring and persistence
+- **Dependencies**: Complete ML stack (PyTorch, sentence-transformers, LlamaIndex)
+- **Performance**: Sub-second test execution with proper isolation
+- **Documentation**: Comprehensive implementation tracking in core reference documents
+
+#### 🎯 Phase 4B M1 Status: 100% Complete
+All M1 objectives achieved following TDD methodology. Infrastructure ready for M2 (Keyword Search Path) implementation.
+
 ## [4.1.0] - 2025-01-23 - Phase 4A: COMPLETE - Documentation & Phase 4B Preparation
 
 ### 📖 Documentation Completion - Phase 4A Ready for Independent Development

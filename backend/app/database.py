@@ -96,6 +96,8 @@ def create_db_and_tables(engine_param=None):
         from app.models import Setting, Workspace, Permission
         # Import Phase 4A models for indexing functionality
         from app.models.indexing import IndexedFile, IndexJob, ControlSetting
+        # Import Phase 4B models for advanced search
+        from app.models.indexing import DocumentChunk
     except ImportError as e:
         # In case models aren't available (like during testing)
         print(f"Warning: Could not import all models: {e}")
@@ -104,10 +106,63 @@ def create_db_and_tables(engine_param=None):
     if target_engine:
         try:
             Base.metadata.create_all(bind=target_engine)
+
+            # Create FTS5 virtual table and triggers for Phase 4B
+            _create_fts_tables(target_engine)
+
         except Exception as e:
             # For now, just log the error and continue - Phase 4A will work without tables initially
             print(f"Warning: Could not create all tables: {e}")
             pass
+
+
+def _create_fts_tables(engine):
+    """
+    Create FTS5 virtual tables and triggers for Phase 4B search functionality.
+
+    Args:
+        engine: SQLAlchemy engine
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as connection:
+            # Create FTS5 virtual table
+            connection.execute(text("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                    text,
+                    content='document_chunks',
+                    content_rowid='id',
+                    tokenize = 'trigram'
+                );
+            """))
+
+            # Create INSERT trigger
+            connection.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON document_chunks BEGIN
+                    INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+                END;
+            """))
+
+            # Create UPDATE trigger
+            connection.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON document_chunks BEGIN
+                    INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+                    INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+                END;
+            """))
+
+            # Create DELETE trigger
+            connection.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON document_chunks BEGIN
+                    INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+                END;
+            """))
+
+            connection.commit()
+
+    except Exception as e:
+        print(f"Warning: Could not create FTS tables: {e}")
 
 # Dependency to get a DB session
 def get_db():
