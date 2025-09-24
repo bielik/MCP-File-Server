@@ -360,7 +360,7 @@ const IndexerDashboard: React.FC = () => {
               <span className="text-sm font-medium text-red-600">{status?.performance_stats.jobs_failed || 0}</span>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Jobs / Minute</span>
-              <span className="text-sm font-medium">{(status?.performance_stats.jobs_per_minute || 0).toFixed ? status?.performance_stats.jobs_per_minute.toFixed(1) : (status?.performance_stats.jobs_per_minute || 0)}</span>
+              <span className="text-sm font-medium">{(status?.performance_stats.jobs_per_minute || 0).toFixed(1)}</span>
             </div>
             </div>
             {status?.performance_stats.uptime_seconds && (
