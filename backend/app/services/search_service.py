@@ -13,10 +13,11 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc
+from sqlalchemy import and_, or_, desc, text
 
-from app.models.indexing import IndexedFile
+from app.models.indexing import IndexedFile, DocumentChunk
 from app.services.permission_service import check_access
+from app.services.permission_postprocessor import PermissionPostprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class SearchService:
 
     def __init__(self):
         """Initialize the search service."""
-        pass
+        self.permission_postprocessor = PermissionPostprocessor()
 
     def _encode_cursor(self, value: Any, sort_by: str) -> str:
         """
@@ -449,3 +450,300 @@ class SearchService:
             size_index += 1
 
         return f"{size_bytes:.1f} {size_names[size_index]}"
+
+    def search_fulltext(
+        self,
+        session: Session,
+        query: str,
+        workspace_id: int,
+        limit: int = 10,
+        cursor: Optional[str] = None,
+        highlight: bool = True,
+        highlight_start: str = "<mark>",
+        highlight_end: str = "</mark>",
+        file_types: Optional[List[str]] = None,
+        date_from: Optional[int] = None,
+        date_to: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Perform full-text search using FTS5 with permission filtering.
+
+        Args:
+            session: Database session
+            query: Search query string
+            workspace_id: Active workspace ID for permission filtering
+            limit: Maximum number of results to return
+            cursor: Cursor for pagination
+            highlight: Whether to include highlighted snippets
+            highlight_start: Start marker for highlighting
+            highlight_end: End marker for highlighting
+            file_types: Optional list of file extensions to filter by
+            date_from: Optional start timestamp for date filtering
+            date_to: Optional end timestamp for date filtering
+
+        Returns:
+            Dictionary with search results and pagination info
+        """
+        try:
+            if not query or not query.strip():
+                return {
+                    "results": [],
+                    "total_results": 0,
+                    "has_more": False,
+                    "cursor": None,
+                    "query": query,
+                    "search_time_ms": 0
+                }
+
+            start_time = datetime.now()
+
+            # Clean and prepare the FTS5 query
+            fts_query = self._prepare_fts_query(query)
+
+            # Build base FTS search query
+            sql_params = {"fts_query": fts_query, "limit": limit + 1}
+
+            # Build FTS search with JOIN to get file information
+            base_query = """
+                SELECT
+                    c.id as chunk_id,
+                    c.file_id,
+                    c.ordinal,
+                    c.text as chunk_text,
+                    c.start_byte,
+                    c.end_byte,
+                    f.doc_id,
+                    f.path as file_path,
+                    f.size_bytes,
+                    f.mtime_epoch,
+                    fts.rank
+                FROM chunks_fts fts
+                JOIN document_chunks c ON c.id = fts.rowid
+                JOIN indexed_files f ON f.id = c.file_id
+                WHERE chunks_fts MATCH :fts_query
+            """
+
+            # Add file type filtering
+            if file_types:
+                placeholders = ", ".join([f":ext{i}" for i in range(len(file_types))])
+                base_query += f" AND f.path GLOB '*{placeholders}'"
+                for i, ext in enumerate(file_types):
+                    sql_params[f"ext{i}"] = f"*{ext}"
+
+            # Add date range filtering
+            if date_from:
+                base_query += " AND f.mtime_epoch >= :date_from"
+                sql_params["date_from"] = date_from
+
+            if date_to:
+                base_query += " AND f.mtime_epoch <= :date_to"
+                sql_params["date_to"] = date_to
+
+            # Add ordering and pagination
+            base_query += " ORDER BY fts.rank DESC, f.path, c.ordinal"
+
+            # Handle cursor pagination
+            if cursor:
+                cursor_value = self._decode_cursor(cursor, "rank")
+                if cursor_value:
+                    base_query += " AND fts.rank < :cursor_rank"
+                    sql_params["cursor_rank"] = cursor_value
+
+            base_query += " LIMIT :limit"
+
+            # Execute the FTS search
+            raw_results = session.execute(text(base_query), sql_params).fetchall()
+
+            # Check if there are more results
+            has_more = len(raw_results) > limit
+            if has_more:
+                raw_results = raw_results[:limit]
+
+            # Process results
+            search_results = []
+            processed_files = set()  # To avoid duplicate files
+
+            for row in raw_results:
+                try:
+                    # Generate highlighted snippet if requested
+                    highlighted_text = None
+                    if highlight:
+                        highlighted_text = self._generate_highlighted_snippet(
+                            row.chunk_text,
+                            query,
+                            highlight_start,
+                            highlight_end
+                        )
+
+                    result = {
+                        "doc_id": row.doc_id,
+                        "file_path": row.file_path,
+                        "chunk_id": row.chunk_id,
+                        "chunk_ordinal": row.ordinal,
+                        "score": float(row.rank) if row.rank else 1.0,
+                        "chunk_text": row.chunk_text,
+                        "start_byte": row.start_byte,
+                        "end_byte": row.end_byte,
+                        "file_size": row.size_bytes,
+                        "file_mtime": row.mtime_epoch
+                    }
+
+                    if highlighted_text:
+                        result["highlighted_text"] = highlighted_text
+
+                    search_results.append(result)
+                    processed_files.add(row.doc_id)
+
+                except Exception as e:
+                    logger.warning(f"Error processing search result: {e}")
+                    continue
+
+            # Apply permission filtering
+            filtered_results = self.permission_postprocessor.filter_results(
+                search_results, workspace_id, session
+            )
+
+            # Generate next cursor
+            next_cursor = None
+            if has_more and filtered_results:
+                last_rank = filtered_results[-1]["score"]
+                next_cursor = self._encode_cursor(last_rank, "rank")
+
+            # Calculate search time
+            end_time = datetime.now()
+            search_time_ms = int((end_time - start_time).total_seconds() * 1000)
+
+            return {
+                "results": filtered_results,
+                "total_results": len(filtered_results),
+                "has_more": has_more and len(filtered_results) >= limit,
+                "cursor": next_cursor,
+                "query": query,
+                "search_time_ms": search_time_ms,
+                "files_found": len(processed_files)
+            }
+
+        except Exception as e:
+            logger.error(f"Full-text search failed: {e}")
+            return {
+                "results": [],
+                "total_results": 0,
+                "has_more": False,
+                "cursor": None,
+                "query": query,
+                "error": str(e),
+                "search_time_ms": 0
+            }
+
+    def _prepare_fts_query(self, query: str) -> str:
+        """
+        Prepare and sanitize FTS5 query.
+
+        Args:
+            query: Raw search query
+
+        Returns:
+            Sanitized FTS5 query string
+        """
+        try:
+            # Basic sanitization
+            query = query.strip()
+
+            # Handle quoted phrases (keep as-is)
+            if query.startswith('"') and query.endswith('"'):
+                return query
+
+            # Handle boolean operators
+            boolean_operators = ['AND', 'OR', 'NOT']
+            for op in boolean_operators:
+                if op in query.upper():
+                    # Query contains boolean operators, pass through with basic validation
+                    # Remove potentially problematic characters but preserve operators
+                    query = query.replace('"', '""')  # Escape quotes
+                    return query
+
+            # Handle wildcard queries
+            if '*' in query:
+                return query
+
+            # For simple queries, add implicit wildcards for better matching
+            terms = query.split()
+            if len(terms) == 1:
+                # Single term - add wildcard for prefix matching
+                return f"{terms[0]}*"
+            else:
+                # Multiple terms - treat as phrase or AND query
+                return ' '.join(terms)
+
+        except Exception as e:
+            logger.warning(f"Error preparing FTS query '{query}': {e}")
+            return query  # Return original query as fallback
+
+    def _generate_highlighted_snippet(
+        self,
+        text: str,
+        query: str,
+        start_marker: str,
+        end_marker: str,
+        max_length: int = 200
+    ) -> str:
+        """
+        Generate a highlighted snippet from text.
+
+        Args:
+            text: Source text
+            query: Search query
+            start_marker: Start highlight marker
+            end_marker: End highlight marker
+            max_length: Maximum snippet length
+
+        Returns:
+            Highlighted text snippet
+        """
+        try:
+            if not text or not query:
+                return text
+
+            # Simple highlighting - find query terms in text
+            query_terms = query.lower().strip('"').split()
+            highlighted_text = text
+
+            # Highlight each term
+            for term in query_terms:
+                if not term or len(term) < 2:
+                    continue
+
+                # Use case-insensitive replacement
+                import re
+                pattern = re.compile(re.escape(term), re.IGNORECASE)
+                highlighted_text = pattern.sub(
+                    lambda m: f"{start_marker}{m.group()}{end_marker}",
+                    highlighted_text
+                )
+
+            # Truncate if too long, trying to keep highlights
+            if len(highlighted_text) > max_length:
+                # Find first highlight position
+                highlight_pos = highlighted_text.find(start_marker)
+                if highlight_pos != -1:
+                    # Center snippet around first highlight
+                    start_pos = max(0, highlight_pos - max_length // 2)
+                    end_pos = min(len(highlighted_text), start_pos + max_length)
+                    snippet = highlighted_text[start_pos:end_pos]
+
+                    # Add ellipsis if truncated
+                    if start_pos > 0:
+                        snippet = "..." + snippet
+                    if end_pos < len(highlighted_text):
+                        snippet = snippet + "..."
+
+                    return snippet
+                else:
+                    # No highlights found, just truncate from beginning
+                    return highlighted_text[:max_length] + "..."
+
+            return highlighted_text
+
+        except Exception as e:
+            logger.warning(f"Error generating highlighted snippet: {e}")
+            return text  # Return original text as fallback

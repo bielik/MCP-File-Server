@@ -1,7 +1,7 @@
 # MCP KnowledgeExplorer
 
-> **🎉 Status: Phase 4B M1 COMPLETE - Foundations Ready for Advanced Search!**
-> Phase 4B Milestone 1 (Foundations) is 100% complete with database schema extensions and infrastructure for advanced search and retrieval. The DocumentChunk model, FTS5 virtual tables, Qdrant vector database, and comprehensive test suite (19 tests) are operational. Ready for M2 Keyword Search Path implementation.
+> **🎉 Status: Phase 4B M2 COMPLETE - Keyword Search Ready!**
+> Phase 4B Milestone 2 (Keyword Search Path) is 100% complete with production-ready full-text search capabilities. The complete TEXT_EXTRACT → CHUNK → FTS_INDEX pipeline, FTS5 search with trigram tokenizer, PermissionPostprocessor security layer, and search_fulltext MCP tool (8th tool) are operational with 49+ comprehensive tests. Ready for M3 Semantic Search implementation.
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Validate all MCP functionality with the comprehensive test routine:
 
 **Features:**
 - ✅ Adaptive pre-validation (checks workspace and permissions)
-- ✅ Tests all 7 MCP tools with permission enforcement
+- ✅ Tests all 8 MCP tools with permission enforcement
 - ✅ Security testing (directory traversal, unauthorized access)
 - ✅ Performance validation (sub-25ms response times)
 - ✅ JSON reporting with detailed metrics
@@ -161,12 +161,15 @@ The existing file system tools remain fully functional. Phase 4 will introduce a
 | `search_files_by_metadata` | `filename_pattern, file_types, size_range, mtime_range` | Search files by metadata criteria | ✅ Ready |
 | `get_file_info` | `doc_id: string` | Get detailed file information by document ID | ✅ Ready |
 | `get_search_statistics` | - | Retrieve indexing progress and search statistics | ✅ Ready |
+| **Phase 4B Search Tools** | | | |
+| `search_fulltext` | `query: string, limit, cursor, highlight, file_types` | Full-text search with FTS5, highlighting, and filtering | ✅ Ready |
 
-### 4.2. Planned Advanced Search Tools (Phase 4)
+### 4.2. Planned Advanced Search Tools (Phase 4B M3+)
 | Tool | Description | Status |
 |------|-------------|---------|
-| `search_content_by_keyword` | High-quality, typo-tolerant full-text search | 📋 Planned |
-| `search_content_by_semantic` | Semantic similarity search using embeddings | 📋 Planned |
+| `search_semantic` | Semantic similarity search using embeddings | 📋 Planned |
+| `find_similar` | "More like this" vector search | 📋 Planned |
+| `search_hybrid` | Combined FTS5 and vector search with RRF | 📋 Planned |
 
 ---
 
@@ -298,7 +301,7 @@ curl http://localhost:8000/api/system/db-info
 
 **Complete MCP Protocol Validation:**
 ```bash
-# Test all 7 MCP tools with comprehensive suite
+# Test all 8 MCP tools with comprehensive suite
 ./scripts/test-mcp-wisdom.sh --comprehensive
 
 # Quick validation

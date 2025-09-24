@@ -1,7 +1,7 @@
 ﻿# Indexer Service - MCP KnowledgeExplorer
 
 ## Overview
-The Indexer Service is a FastAPI application that monitors the mounted filesystem, creates indexing jobs, and persists results to the shared SQLite database. It runs alongside the Backend and Frontend as part of the Phase 4A architecture.
+The Indexer Service is a FastAPI application that monitors the mounted filesystem, creates indexing jobs, and persists results to the shared SQLite database. It runs alongside the Backend and Frontend as part of the Phase 4B M2 architecture with full text processing capabilities.
 
 - Database: shared SQLite at `/data/database.db`
 - Watch root: `/source` (host folder bind-mounted)
@@ -21,14 +21,18 @@ The Indexer Service is a FastAPI application that monitors the mounted filesyste
 - POST `/control/resume`  — persist `indexer_paused=false`
 - POST `/control/throttle/{percentage}` — set `throttle_pct` (0–100)
 
-## Job Types (Phase 4A)
+## Job Types (Phase 4B M2)
 
-- `index_file`   — standard indexing (Phase 4A simulates completion)
-- `reindex_file` — treated same as `index_file` in Phase 4A (full processing in 4B)
+- `index_file`   — standard indexing (creates metadata record)
+- `reindex_file` — reprocesses file (handled same as `index_file`)
+- `TEXT_EXTRACT` — extracts text content using LlamaIndex SimpleDirectoryReader with fallback
+- `CHUNK`        — splits text into 512-token chunks with 50-token overlap for processing
+- `FTS_INDEX`    — populates FTS5 virtual table for full-text search capabilities
+- `EMBED`        — prepares for vector embeddings (Phase 4B M3+)
 
 ## Configuration
 
-The service uses the project-wide Phase4AConfig. In Docker, paths are container-native:
+The service uses the project-wide Phase4AConfig with Phase 4B M2 extensions. In Docker, paths are container-native:
 
 - Database file: `/data/database.db` (backed by host `./data/database.db`)
 - Source mount: `/source` (backed by host path from `.env` `SHARED_FS_PATH`)
@@ -90,6 +94,14 @@ indexer:
 - Healthcheck failing: Confirm service responds at `/live`; ensure `requests` is installed (image includes it).
 - Duplicate databases: Both backend and indexer must point to the same `/data/database.db`. Docker Compose handles this when `DATABASE_PATH=./data` in `.env`.
 
-## Phase 4B Preview
+## Phase 4B M2 Status ✅ COMPLETE
 
-Phase 4B will extend job processing with content extraction, embeddings, and semantic search, while reusing the watcher, queue, and control foundations from Phase 4A.
+**Keyword Search Path Implementation Complete**
+- ✅ TEXT_EXTRACT → CHUNK → FTS_INDEX processing pipeline operational
+- ✅ LlamaIndex integration with fallback strategies for reliable text extraction
+- ✅ FTS5 virtual table with trigram tokenizer for typo-tolerant full-text search
+- ✅ 49+ comprehensive tests validating all job processing functionality
+- ✅ Maintains watcher, queue, and control foundations from Phase 4A
+
+**Phase 4B M3 Roadmap:**
+Phase 4B M3 will implement semantic search with vector embeddings, EMBED job processing, and hybrid search capabilities building on the current infrastructure.

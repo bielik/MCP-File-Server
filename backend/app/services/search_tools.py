@@ -166,3 +166,63 @@ def get_search_statistics() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"MCP get_search_statistics failed: {e}")
         raise
+
+
+def search_fulltext(
+    query: str,
+    limit: int = 10,
+    cursor: Optional[str] = None,
+    highlight: bool = True,
+    highlight_start: str = "<mark>",
+    highlight_end: str = "</mark>",
+    file_types: Optional[List[str]] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    MCP tool implementation for full-text search.
+
+    Args:
+        query: Search query string
+        limit: Maximum number of results to return
+        cursor: Cursor for pagination
+        highlight: Whether to include highlighted snippets
+        highlight_start: Start marker for highlighting
+        highlight_end: End marker for highlighting
+        file_types: Optional list of file extensions to filter by
+        date_from: Optional start timestamp for date filtering
+        date_to: Optional end timestamp for date filtering
+
+    Returns:
+        Search results dictionary
+    """
+    try:
+        search_service = SearchService()
+
+        with next(get_db()) as session:
+            # Get the active workspace ID
+            # For now, we'll use workspace ID 1 as default
+            # TODO: Implement proper workspace context detection from MCP session
+            workspace_id = 1
+
+            # Perform the search
+            results = search_service.search_fulltext(
+                session=session,
+                query=query,
+                workspace_id=workspace_id,
+                limit=limit,
+                cursor=cursor,
+                highlight=highlight,
+                highlight_start=highlight_start,
+                highlight_end=highlight_end,
+                file_types=file_types,
+                date_from=date_from,
+                date_to=date_to
+            )
+
+        logger.info(f"MCP search_fulltext for query '{query}' returned {results.get('total_results', 0)} results")
+        return results
+
+    except Exception as e:
+        logger.error(f"MCP search_fulltext failed for query '{query}': {e}")
+        raise

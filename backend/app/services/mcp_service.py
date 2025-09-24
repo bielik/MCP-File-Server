@@ -171,6 +171,60 @@ def get_tools() -> List[mcp_schemas.ToolDefinition]:
                 "properties": {},
                 "required": []
             }
+        ),
+
+        mcp_schemas.ToolDefinition(
+            name="search_fulltext",
+            description="Perform full-text search across indexed document content using FTS5.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query string. Supports phrase search with quotes, boolean operators (AND, OR, NOT), and wildcards (*)."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 10, max: 100)",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 10
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Cursor for pagination to get next set of results"
+                    },
+                    "highlight": {
+                        "type": "boolean",
+                        "description": "Whether to include highlighted text snippets (default: true)",
+                        "default": True
+                    },
+                    "highlight_start": {
+                        "type": "string",
+                        "description": "Start marker for highlighted text (default: '<mark>')",
+                        "default": "<mark>"
+                    },
+                    "highlight_end": {
+                        "type": "string",
+                        "description": "End marker for highlighted text (default: '</mark>')",
+                        "default": "</mark>"
+                    },
+                    "file_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of file extensions to filter by (e.g., ['.txt', '.md', '.py'])"
+                    },
+                    "date_from": {
+                        "type": "integer",
+                        "description": "Optional start timestamp for date filtering (Unix epoch)"
+                    },
+                    "date_to": {
+                        "type": "integer",
+                        "description": "Optional end timestamp for date filtering (Unix epoch)"
+                    }
+                },
+                "required": ["query"]
+            }
         )
     ]
     return tools

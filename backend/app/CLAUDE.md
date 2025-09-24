@@ -3,9 +3,9 @@
 ## Directory Overview
 This is the core Python application directory for the MCP KnowledgeExplorer backend server. All business logic, API endpoints, and services are contained within this directory.
 
-## 🎉 IMPLEMENTATION STATUS: PHASE 4A COMPLETE
-**✅ Advanced Search & Indexer Backend Fully Operational**
-The backend now has a complete Phase 4A implementation with indexer service integration, search tools, and critical database fixes resolved.
+## 🎉 IMPLEMENTATION STATUS: PHASE 4B M2 COMPLETE
+**✅ Keyword Search Path Fully Operational**
+The backend now has a complete Phase 4B M2 implementation with full-text search (FTS5), text extraction pipeline, chunking, and the 8th MCP tool (search_fulltext) operational with comprehensive test coverage.
 
 ## Module Structure
 
@@ -51,11 +51,12 @@ The backend now has a complete Phase 4A implementation with indexer service inte
   - **`__init__.py`** - CRUD function definitions
   - Follows repository pattern for data access
 
-### Business Logic (`services/`) - ✅ **PHASE 4A ENHANCED**
+### Business Logic (`services/`) - ✅ **PHASE 4B M2 ENHANCED**
 - **`file_service.py`** - ✅ **COMPLETE** File system operations with permission checking
-- **`mcp_service.py`** - ✅ **PHASE 4A ENHANCED** MCP tool definitions including 4 new search tools
+- **`mcp_service.py`** - ✅ **PHASE 4B M2 ENHANCED** MCP tool definitions including 5 search tools (8 total)
 - **`permission_service.py`** - ✅ **COMPLETE** Security and permission validation
-- **`search_service.py`** - ✅ **NEW** Phase 4A search operations with cursor pagination
+- **`permission_postprocessor.py`** - ✅ **NEW M2** Security filtering for search results with O(1) performance
+- **`search_service.py`** - ✅ **PHASE 4B M2 ENHANCED** Full-text search with FTS5, highlighting, and filtering
 - **`workspace_service.py`** - ✅ **COMPLETE** Phase 3 workspace management
 - **`__init__.py`** - Service layer initialization
 
@@ -131,24 +132,27 @@ def get_tools() -> List[ToolDefinition]:
 
 ## Current Implementation Status
 
-### ✅ Completed - Phase 4A Advanced Backend
+### ✅ Completed - Phase 4B M2 Keyword Search Backend
 - FastAPI application setup with async support
-- Complete MCP JSON-RPC 2.0 protocol implementation with 7 tools
+- Complete MCP JSON-RPC 2.0 protocol implementation with 8 tools
 - Core file system tools with integrated security
-- **NEW**: 4 Phase 4A search tools with cursor pagination
+- **4 Phase 4A search tools** with cursor pagination (list_all_files, search_files_by_metadata, get_file_info, get_search_statistics)
+- **NEW M2**: Full-text search tool (search_fulltext) with FTS5, highlighting, and filtering
+- **NEW M2**: PermissionPostprocessor for O(1) security filtering of search results
 - Database-driven workspace permission system (Phase 3)
-- **NEW**: Phase 4A models for indexing (IndexedFile, IndexJob, ControlSetting)
+- Phase 4B models for indexing and chunking (IndexedFile, IndexJob, ControlSetting, DocumentChunk)
 - Real-time activity logging and broadcasting
 - Comprehensive error handling with JSON-RPC compliance
 - Dual WebSocket endpoint architecture
-- **ENHANCED**: Database configuration with WAL mode and Phase 4A schema
+- Database configuration with WAL mode and full Phase 4B M2 schema
 - HTTP MCP endpoint for client flexibility
 
-### ✅ Services Layer - Phase 4A Enhanced
+### ✅ Services Layer - Phase 4B M2 Enhanced
 - **File Service**: Production-ready file operations
 - **Permission Service**: Security validation and path checking
-- **MCP Service**: Tool discovery with 7 tools (3 core + 4 search)
-- **Search Service**: ✅ **NEW** Cursor pagination and metadata search
+- **MCP Service**: Tool discovery with 8 tools (3 core + 5 search)
+- **Search Service**: ✅ **M2 ENHANCED** Full-text search with FTS5, highlighting, filtering
+- **Permission Postprocessor**: ✅ **NEW M2** O(1) security filtering for search results
 - **Workspace Service**: Database-driven workspace management
 - **Activity Logging**: Real-time WebSocket broadcasting
 
@@ -167,7 +171,7 @@ def get_tools() -> List[ToolDefinition]:
 | `tools/list` | ✅ Complete | Returns available file system tools |
 | `tools/call` | ✅ Complete | Executes tools with parameter validation |
 
-### Available Tools ✅ PHASE 4A ENHANCED
+### Available Tools ✅ PHASE 4B M2 ENHANCED
 | Tool | Parameters | Security | Description |
 |------|------------|----------|-------------|
 | **Core File System Tools** | | | |
@@ -179,6 +183,8 @@ def get_tools() -> List[ToolDefinition]:
 | `search_files_by_metadata` | `filename_pattern, file_types, size_range` | Permission filter | Search files by metadata criteria |
 | `get_file_info` | `doc_id: string` | Permission check | Get detailed file information |
 | `get_search_statistics` | - | - | Retrieve indexing and search statistics |
+| **Phase 4B M2 Search Tools** | | | |
+| `search_fulltext` | `query: string, limit, cursor, highlight, file_types` | Permission filter | Full-text search with FTS5, highlighting, and filtering |
 
 ### Error Handling ✅
 Complete JSON-RPC 2.0 error responses:
@@ -301,31 +307,39 @@ The backend provides these interfaces for frontend development:
 - **Activity Logging**: Real-time MCP operation broadcasting
 - **Configuration**: Server status and settings endpoints
 
-## Success Metrics ✅ Phase 4A Complete
+## Success Metrics ✅ Phase 4B M2 Complete
 
-All Phase 4A backend objectives have been achieved:
-- **✅ MCP Compliance**: Full JSON-RPC 2.0 and MCP 2024-11-05 support with 7 tools
+All Phase 4B M2 backend objectives have been achieved:
+- **✅ MCP Compliance**: Full JSON-RPC 2.0 and MCP 2024-11-05 support with 8 tools
 - **✅ Security**: Database-driven workspace permission system operational
 - **✅ File Operations**: All core tools implemented and tested
-- **✅ Search Tools**: 4 new Phase 4A search tools with cursor pagination
-- **✅ Database Integration**: Phase 4A models (IndexedFile, IndexJob, ControlSetting)
+- **✅ Search Tools**: 5 search tools total (4 Phase 4A + 1 Phase 4B M2)
+- **✅ Full-Text Search**: FTS5 with trigram tokenizer for typo-tolerant search
+- **✅ Permission Filtering**: O(1) security filtering for search results
+- **✅ Database Integration**: Full Phase 4B M2 schema (DocumentChunk, FTS5 tables)
 - **✅ Real-time Updates**: WebSocket broadcasting operational
 - **✅ Error Handling**: Comprehensive JSON-RPC error responses
 - **✅ Performance**: Async operations with WAL mode database
+- **✅ Test Coverage**: 49+ comprehensive tests with TDD methodology
 - **✅ Development Experience**: Hot-reload and comprehensive logging
-- **✅ Critical Fixes**: All 8 issues from independent review panel resolved
 
 ---
 
-**🚀 The MCP KnowledgeExplorer backend Phase 4A is now complete!**
+**🚀 The MCP KnowledgeExplorer backend Phase 4B M2 is now complete!**
 
-*This backend implementation provides a complete, production-ready MCP server with advanced search capabilities and robust indexing foundation. Ready for Phase 4B semantic search development.*
+*This backend implementation provides a complete, production-ready MCP server with full-text search capabilities, text processing pipeline, and robust keyword search foundation. Ready for Phase 4B M3 semantic search development.*
 
 ---
-*Last updated: 2025-01-23 - Phase 4A Critical Fixes Complete*
+*Last updated: 2025-01-24 - Phase 4B M2 Complete*
 ### Operational Notes (post-4A)
 - Config shim at repo root: env_config.py re-exports config.env_config for stable imports in tests.
 - Added PermissionService static wrapper for test compatibility.
 - Indexer /status exposes jobs_per_minute (rolling) for ETA.
 - Backend and indexer images include equests for healthchecks.
 
+
+### Phase 4B M2 Additions
+- **search_fulltext tool**: Added as 8th MCP tool with comprehensive FTS5 support, highlighting, and filtering
+- **PermissionPostprocessor**: Provides O(1) security filtering for search results using pre-computed allowed path sets
+- **FTS5 Implementation**: Virtual table with trigram tokenizer enables typo-tolerant search across all content
+- **Processing Pipeline**: TEXT_EXTRACT → CHUNK → FTS_INDEX pipeline fully operational with LlamaIndex integration

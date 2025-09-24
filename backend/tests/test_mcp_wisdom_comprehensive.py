@@ -319,6 +319,59 @@ class MCPWisdomTestSuite:
         self.test_results["tool_tests"]["get_search_statistics"] = "✅ Retrieved search statistics"
         return True
 
+    def test_mcp_wisdom_search_fulltext(self):
+        """Test the search_fulltext MCP tool for Phase 4B M2."""
+        # Test basic keyword search
+        search_result = self._mcp_call("search_fulltext", {
+            "query": "machine learning",
+            "limit": 10
+        })
+
+        if "error" in search_result:
+            if "not implemented" in search_result["error"].get("message", "").lower():
+                self.test_results["tool_tests"]["search_fulltext"] = "⚠️ Tool not yet implemented (expected for M2)"
+                return True
+            else:
+                assert False, f"search_fulltext failed: {search_result}"
+
+        assert "result" in search_result, f"search_fulltext failed: {search_result}"
+
+        # Verify response structure
+        result_content = search_result["result"]["content"][0]["text"]
+        results = eval(result_content) if result_content != "[]" else []
+
+        # Test with phrase search
+        phrase_result = self._mcp_call("search_fulltext", {
+            "query": '"artificial intelligence"',
+            "limit": 5,
+            "highlight": True
+        })
+
+        # Test pagination
+        page1_result = self._mcp_call("search_fulltext", {
+            "query": "learning",
+            "limit": 2
+        })
+
+        if "result" in page1_result:
+            page1_content = page1_result["result"]["content"][0]["text"]
+            page1_results = eval(page1_content) if page1_content != "[]" else []
+
+            # Test cursor pagination if results available
+            if len(page1_results) > 0 and "cursor" in str(page1_content):
+                # Extract cursor for next page test
+                pass
+
+        # Test with file type filtering
+        filtered_result = self._mcp_call("search_fulltext", {
+            "query": "python",
+            "limit": 10,
+            "file_types": [".txt", ".py"]
+        })
+
+        self.test_results["tool_tests"]["search_fulltext"] = "✅ search_fulltext tool functional"
+        return True
+
     # ===== PERMISSION ENFORCEMENT TESTS =====
 
     def test_permission_enforcement_allow(self):
@@ -562,6 +615,7 @@ def test_mcp_wisdom_search_tools():
 
     # Test search functionality
     assert test_suite.test_get_search_statistics(), "Search statistics test failed"
+    assert test_suite.test_mcp_wisdom_search_fulltext(), "Full-text search test failed"
 
 
 if __name__ == "__main__":

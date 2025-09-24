@@ -75,6 +75,8 @@ tool_map = {
     "search_files_by_metadata": search_tools.search_files_by_metadata,
     "get_file_info": search_tools.get_file_info,
     "get_search_statistics": search_tools.get_search_statistics,
+    # Phase 4B Search Tools
+    "search_fulltext": search_tools.search_fulltext,
 }
 
 app.include_router(api_router, prefix="/api")
