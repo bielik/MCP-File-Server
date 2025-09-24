@@ -125,3 +125,14 @@ def check_access(path: str, operation: str):
     get_safe_path(path)
 
     return True
+
+
+# Backward-compatible class wrapper expected by some tests
+class PermissionService:
+    @staticmethod
+    def check_access(path: str, operation: str):
+        return check_access(path, operation)
+
+    @staticmethod
+    def get_safe_path(user_path: str) -> str:
+        return get_safe_path(user_path)

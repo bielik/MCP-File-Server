@@ -323,3 +323,9 @@ All Phase 4A backend objectives have been achieved:
 
 ---
 *Last updated: 2025-01-23 - Phase 4A Critical Fixes Complete*
+### Operational Notes (post-4A)
+- Config shim at repo root: env_config.py re-exports config.env_config for stable imports in tests.
+- Added PermissionService static wrapper for test compatibility.
+- Indexer /status exposes jobs_per_minute (rolling) for ETA.
+- Backend and indexer images include equests for healthchecks.
+

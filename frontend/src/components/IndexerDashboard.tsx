@@ -63,10 +63,13 @@ const IndexerDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [controlLoading, setControlLoading] = useState<string | null>(null);
 
+  // Resolve API base URL (configurable)
+  const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+
   // Fetch indexer status
   const fetchStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/indexer/status');
+      const response = await fetch(`${apiBase}/api/indexer/status`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -82,7 +85,7 @@ const IndexerDashboard: React.FC = () => {
   // Fetch recent files
   const fetchRecentFiles = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/indexer/files?limit=10');
+      const response = await fetch(`${apiBase}/api/indexer/files?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setRecentFiles(data);
@@ -95,7 +98,7 @@ const IndexerDashboard: React.FC = () => {
   // Fetch recent jobs
   const fetchRecentJobs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/indexer/jobs?limit=10');
+      const response = await fetch(`${apiBase}/api/indexer/jobs?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setRecentJobs(data);
@@ -114,7 +117,7 @@ const IndexerDashboard: React.FC = () => {
         body.value = value;
       }
 
-      const response = await fetch('http://localhost:8000/api/indexer/control', {
+      const response = await fetch(`${apiBase}/api/indexer/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -170,9 +173,17 @@ const IndexerDashboard: React.FC = () => {
 
     fetchData();
 
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
+    // Auto-refresh status every 5 seconds
+    const statusInterval = setInterval(fetchStatus, 5000);
+    // Periodically refresh lists every 15 seconds
+    const listsInterval = setInterval(() => {
+      fetchRecentFiles();
+      fetchRecentJobs();
+    }, 15000);
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(listsInterval);
+    };
   }, []);
 
   if (loading && !status) {
@@ -347,6 +358,10 @@ const IndexerDashboard: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Jobs Failed</span>
               <span className="text-sm font-medium text-red-600">{status?.performance_stats.jobs_failed || 0}</span>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Jobs / Minute</span>
+              <span className="text-sm font-medium">{(status?.performance_stats.jobs_per_minute || 0).toFixed ? status?.performance_stats.jobs_per_minute.toFixed(1) : (status?.performance_stats.jobs_per_minute || 0)}</span>
+            </div>
             </div>
             {status?.performance_stats.uptime_seconds && (
               <div className="flex justify-between">

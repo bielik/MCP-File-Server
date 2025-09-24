@@ -714,3 +714,13 @@ This test routine should be executed after every major development phase to ensu
 
 ---
 *This CLAUDE.md file serves as your primary context for understanding and working with the MCP KnowledgeExplorer project. Last updated: 2025-01-23 - Phase 4A Complete & Fully Documented*
+
+## Recent Implementation Notes (post-4A polish)
+- Root config shim: env_config.py re-exports config.env_config for stable imports in tests/local runs.
+- Indexer /status includes jobs_per_minute (rolling) to support ETA computations.
+- Indexer accepts eindex_file jobs in Phase 4A (handled like index_file).
+- Frontend IndexerDashboard reads VITE_API_BASE_URL and refreshes recent files/jobs periodically.
+- Docker-aware SHARED_FS_PATH validation: suppresses warning if /source mount exists.
+- equests added to backend and indexer images for healthchecks.
+- Path model: host C:\Users\<you>\MCP Test is mounted to container /source; services always use /source inside Docker.
+

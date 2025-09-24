@@ -369,3 +369,7 @@ The frontend now provides a complete foundation for Phase 4B semantic search fea
 ---
 
 *Last updated: 2025-01-23 - Phase 4A Frontend Implementation Complete*
+### Post-4A Frontend Notes
+- Indexer Dashboard uses VITE_API_BASE_URL if set to reach backend.
+- Added periodic refresh for recent files and jobs in the dashboard.
+

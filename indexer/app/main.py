@@ -144,6 +144,9 @@ class IndexerService:
             "last_activity": None,
             "start_time": None
         }
+        # Track recent job completions for a rolling rate metric
+        from collections import deque
+        self._recent_completions = deque(maxlen=1000)  # timestamps of last N jobs
 
         logger.info("IndexerService initialized")
 
@@ -245,6 +248,10 @@ class IndexerService:
                 if jobs_processed > 0:
                     self.stats["last_activity"] = time.time()
                     self.stats["jobs_processed"] += jobs_processed
+                    # Record completion timestamps for rate calculation
+                    now_ts = time.time()
+                    for _ in range(jobs_processed):
+                        self._recent_completions.append(now_ts)
 
                 # Sleep if no work was done
                 if jobs_processed == 0:
@@ -319,6 +326,17 @@ class IndexerService:
                 "source_path": self.config.SHARED_FS_PATH
             }
         }
+
+        # Add rolling jobs_per_minute to stats
+        try:
+            import time as _time
+            now = _time.time()
+            one_minute_ago = now - 60.0
+            # Count completions within last 60 seconds
+            recent_count = sum(1 for t in self._recent_completions if t >= one_minute_ago)
+            status["stats"]["jobs_per_minute"] = float(recent_count)
+        except Exception:
+            status["stats"]["jobs_per_minute"] = 0.0
 
         # Add file watcher status
         if self.file_watcher:

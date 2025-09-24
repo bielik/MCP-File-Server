@@ -178,6 +178,24 @@ INDEXER_MAX_WORKERS=2            # Parallel processing control
 
 This configuration strategy enables seamless switching between laptop (CPU-only) and desktop (RTX 4060) environments while maintaining optimal performance for each setup.
 
+#### Frontend API Base URL (new)
+```bash
+# Point the frontend to a non-default backend origin if needed
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+#### Shared Filesystem Mount: Host vs Container paths
+- In Docker, your host folder (e.g., `C:\Users\<you>\MCP Test`) is mounted into the container at `/source`.
+- Backend APIs and the indexer always use `/source` inside the container to access files.
+- The validator in `config/env_config.py` now treats `/source` as authoritative in Docker, so a Windows path string in `.env` will no longer trigger a false warning.
+
+Example docker-compose mapping:
+```
+volumes:
+  - ${SHARED_FS_PATH:-./shared-fs}:/source  # host:container
+```
+Keep `SHARED_FS_PATH` pointing at your host folder. Inside containers, the code uses `/source`.
+
 ---
 
 ## 6. Technology Stack

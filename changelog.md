@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Config import shim `env_config.py` to simplify imports in tests and local runs.
+- Indexer status now includes `jobs_per_minute` for throughput/ETA.
+- Frontend `IndexerDashboard` supports `VITE_API_BASE_URL` and refreshes recent files/jobs periodically.
+
+### Changed
+- Indexer `JobProcessor` accepts `reindex_file` jobs (treated as standard reindex in Phase 4A).
+- Docker-aware validation for `SHARED_FS_PATH` (suppresses false warnings when `/source` is mounted).
+- MCP `list_all_files` logging fixed to report actual counts.
+
+### Dependencies
+- Added `requests` to `backend/requirements.txt` for healthchecks.
+- Added `requests` to `indexer/requirements.txt` for healthchecks.
+
 ## [4.1.0] - 2025-01-23 - Phase 4A: COMPLETE - Documentation & Phase 4B Preparation
 
 ### 📖 Documentation Completion - Phase 4A Ready for Independent Development

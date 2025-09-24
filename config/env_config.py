@@ -350,8 +350,15 @@ class Phase4AConfig(BaseSettings):
         if not Path(self.DATABASE_PATH).exists():
             warnings.append(f"Database path {self.DATABASE_PATH} does not exist")
 
+        # If running inside Docker with a mounted source, accept /source even if the
+        # SHARED_FS_PATH string is a host path that doesn't exist in the container.
+        from pathlib import Path as _Path
         if not Path(self.SHARED_FS_PATH).exists():
-            warnings.append(f"Shared filesystem path {self.SHARED_FS_PATH} does not exist")
+            if _Path('/source').exists():
+                # Suppress warning: mount is present at /source
+                pass
+            else:
+                warnings.append(f"Shared filesystem path {self.SHARED_FS_PATH} does not exist")
 
         return warnings
 

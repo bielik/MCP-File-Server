@@ -442,7 +442,7 @@ class JobProcessor:
         try:
             logger.info(f"Processing job {job.id} (type: {job.job_type}, file: {job.file_id})")
 
-            if job.job_type == "index_file":
+            if job.job_type in ("index_file", "reindex_file"):
                 return self._process_file_index(session, job)
             else:
                 raise ValueError(f"Unknown job type: {job.job_type}")

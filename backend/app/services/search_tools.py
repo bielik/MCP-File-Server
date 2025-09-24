@@ -50,7 +50,11 @@ def list_all_files(
                 sort_by=sort_by
             )
 
-        logger.info(f"MCP list_all_files returned {results['total_returned']} files")
+        try:
+            total = len(results.get('files', [])) if isinstance(results, dict) else len(results)
+        except Exception:
+            total = 0
+        logger.info(f"MCP list_all_files returned {total} files")
         return results
 
     except Exception as e:
