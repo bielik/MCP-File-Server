@@ -6,7 +6,7 @@ This module exports all database models used throughout the application.
 
 from .setting import Setting
 from .workspace import Workspace, Permission
-from .indexing import IndexedFile, IndexJob, ControlSetting
+from .indexing import IndexedFile, IndexJob, ControlSetting, DocumentChunk
 
 __all__ = [
     "Setting",
@@ -15,4 +15,5 @@ __all__ = [
     "IndexedFile",
     "IndexJob",
     "ControlSetting",
+    "DocumentChunk",
 ]

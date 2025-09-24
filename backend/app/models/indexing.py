@@ -68,6 +68,7 @@ class IndexedFile(Base):
 
     # Relationships
     jobs = relationship("IndexJob", back_populates="file", cascade="all, delete-orphan")
+    chunks = relationship("DocumentChunk", back_populates="file", cascade="all, delete-orphan")
 
     # Indexes for performance
     __table_args__ = (
@@ -477,7 +478,7 @@ class DocumentChunk(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Foreign key to IndexedFile
-    file_id = Column(Integer, ForeignKey("indexed_files.id"), nullable=False, index=True)
+    file_id = Column(Integer, ForeignKey("indexed_files.id", ondelete='CASCADE'), nullable=False, index=True)
 
     # Chunk ordering and position
     ordinal = Column(Integer, nullable=False, index=True)  # Chunk order within file (0-based)
@@ -503,7 +504,7 @@ class DocumentChunk(Base):
     embedding_version = Column(String(16), nullable=True)  # Version of embedding logic
 
     # Relationships
-    file = relationship("IndexedFile", backref="chunks")
+    file = relationship("IndexedFile", back_populates="chunks")
 
     # Indexes for performance
     __table_args__ = (

@@ -250,3 +250,49 @@ class TestFTSSynchronizationTriggers:
         # Verify FTS was cleaned up
         fts_after = test_db.execute(text("SELECT rowid FROM chunks_fts WHERE rowid = :chunk_id"), {"chunk_id": chunk_id}).fetchone()
         assert fts_after is None, "Chunk should be removed from FTS after delete"
+
+
+class TestCascadeDeletion:
+    """Test CASCADE deletion from IndexedFile to DocumentChunk."""
+
+    def test_cascade_delete_chunks_when_file_deleted(self, test_db):
+        """Test that deleting an IndexedFile automatically deletes associated DocumentChunks."""
+        # Enable foreign key constraints (required for CASCADE in SQLite)
+        test_db.execute(text("PRAGMA foreign_keys = ON"))
+
+        # Insert test file
+        test_db.execute(text("""
+            INSERT INTO indexed_files (doc_id, path, file_hash, size_bytes, mtime_epoch, discovered_at, is_indexed, is_text, is_binary, has_ocr)
+            VALUES ('test_cascade_doc_id', 'test_cascade_file.txt', 'cascade_hash123', 1024, 1234567890, 1234567890, 1, 1, 0, 0)
+        """))
+
+        file_result = test_db.execute(text("SELECT id FROM indexed_files WHERE doc_id = 'test_cascade_doc_id'")).fetchone()
+        file_id = file_result[0]
+
+        # Insert multiple chunks for this file
+        test_db.execute(text("""
+            INSERT INTO document_chunks (file_id, ordinal, text, start_byte, end_byte, word_count, char_count, created_at, updated_at, has_embedding)
+            VALUES
+            (:file_id, 0, 'First chunk content', 0, 100, 3, 19, 1234567890, 1234567890, 0),
+            (:file_id, 1, 'Second chunk content', 101, 200, 3, 20, 1234567891, 1234567891, 0),
+            (:file_id, 2, 'Third chunk content', 201, 300, 3, 19, 1234567892, 1234567892, 0)
+        """), {"file_id": file_id})
+
+        # Verify chunks were created
+        chunks_before = test_db.execute(text("SELECT COUNT(*) FROM document_chunks WHERE file_id = :file_id"), {"file_id": file_id}).fetchone()
+        assert chunks_before[0] == 3, "Should have 3 chunks before deletion"
+
+        # Verify chunks exist in FTS
+        fts_before = test_db.execute(text("SELECT COUNT(*) FROM chunks_fts")).fetchone()
+        assert fts_before[0] >= 3, "FTS should contain the chunks"
+
+        # Delete the indexed file (should CASCADE to chunks)
+        test_db.execute(text("DELETE FROM indexed_files WHERE id = :file_id"), {"file_id": file_id})
+
+        # Verify chunks were automatically deleted
+        chunks_after = test_db.execute(text("SELECT COUNT(*) FROM document_chunks WHERE file_id = :file_id"), {"file_id": file_id}).fetchone()
+        assert chunks_after[0] == 0, "All chunks should be deleted via CASCADE"
+
+        # Verify FTS was also cleaned up (via triggers)
+        fts_after = test_db.execute(text("SELECT COUNT(*) FROM chunks_fts")).fetchone()
+        assert fts_after[0] < fts_before[0], "FTS entries should be deleted via triggers"

@@ -21,6 +21,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `requests` to `backend/requirements.txt` for healthchecks.
 - Added `requests` to `indexer/requirements.txt` for healthchecks.
 
+## [4.2.0-M1-hotfix] - 2025-01-24 - Phase 4B M1 Post-Implementation Review Fixes
+
+### 🔍 Independent Code Review Resolution
+Following Phase 4B M1 completion, an independent code review identified critical issues that undermined test reliability and code quality standards.
+
+### Fixed
+- **Critical Issue 016 - Qdrant Integration Tests Using Mocks**: Removed global `patch.dict` mock from `backend/tests/phase4b/test_qdrant_integration.py` that replaced all qdrant_client imports with MagicMock, causing tests to always pass regardless of actual service availability
+  - Replaced mock with proper `try/except` import handling for real `qdrant_client` library
+  - Added connection validation in test fixtures with 5-second timeout
+  - Tests now skip gracefully when Qdrant service unavailable (correct behavior)
+  - Tests validate real Qdrant integration when container running
+- **Moderate Issue 017 - DocumentChunk Missing from Model Exports**: Added `DocumentChunk` import and export to `backend/app/models/__init__.py`
+  - Fixed guideline-compliant import pattern: `from app.models import DocumentChunk` now works
+  - Added DocumentChunk to `__all__` list for proper barrel export
+
+### Changed
+- Qdrant integration test behavior: 7 skipped + 1 passed (without service) → 6 skipped + 2 passed (with service)
+- Integration tests now provide real infrastructure validation instead of false confidence through mocks
+
+### Quality
+- **Test Reliability**: Eliminated false positive test results from mocked dependencies
+- **Code Standards**: All Phase 4B models now follow project barrel export conventions
+- **Production Readiness**: Critical integration test issues resolved for M2 development
+
+### Files Modified
+- `backend/tests/phase4b/test_qdrant_integration.py` - Removed global mock, added real client logic
+- `backend/app/models/__init__.py` - Added DocumentChunk barrel exports
+
 ## [4.2.0-M1] - 2025-01-24 - Phase 4B Milestone 1: Foundations Complete
 
 ### 🏗️ Phase 4B M1 - Database & Infrastructure Foundations

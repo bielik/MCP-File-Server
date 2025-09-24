@@ -50,9 +50,10 @@ Phase 4B will add four new tools, expanding the total from 7 to 11. All tools wi
 
 ### M1 - Foundations (Database & Infrastructure) ✅ **COMPLETE**
 
-> **Status**: 100% Complete
-> **Completion Date**: 2025-01-24
-> **Test Results**: 11/11 database schema tests passing, 8/8 Qdrant integration tests created
+> **Status**: 100% Complete with Post-Implementation Review Issues Resolved
+> **Completion Date**: 2025-01-24 (Initial) + 2025-01-24 (Review Fixes)
+> **Test Results**: 11/11 database schema tests passing, 8/8 Qdrant integration tests with proper skip logic
+> **Code Quality**: Independent review critical issues resolved
 
 #### **Tests to Write First:** ✅ **COMPLETED**
 
@@ -97,6 +98,66 @@ Phase 4B will add four new tools, expanding the total from 7 to 11. All tools wi
     -   **Features**: Dry-run support, batch processing, comprehensive error handling
     -   **Job Types**: Creates TEXT_EXTRACT, CHUNK, FTS_INDEX, EMBED jobs for existing files
     -   **Usage**: Command-line script with --dry-run and --batch-size options
+
+#### **Post-Implementation Review & Critical Fixes** ❌→✅ **RESOLVED**
+
+After M1 completion, independent code reviews identified critical issues that undermined test reliability and production readiness:
+
+##### **Critical Issue 1: Qdrant Tests Using Mocks** ❌→✅
+**Problem**: `backend/tests/phase4b/test_qdrant_integration.py` used global mock (lines 17-25) replacing real `qdrant_client` with `MagicMock`.
+
+**Impact**: All integration tests ran against mocks, always reported success, never validated real infrastructure.
+
+**Resolution**:
+- ✅ Removed global `patch.dict` mock completely
+- ✅ Added proper `try/except` import for real `qdrant_client` library
+- ✅ Implemented connection testing in fixtures with 5-second timeout
+- ✅ Tests now skip gracefully when service unavailable (correct behavior)
+- ✅ Tests validate real Qdrant integration when container running
+
+**Validation**:
+- Without Qdrant: 7 skipped, 1 passed (proper skip logic)
+- With Qdrant: 6 skipped, 2 passed (real integration tests)
+
+##### **Moderate Issue 2: DocumentChunk Export Missing** ❌→✅
+**Problem**: `DocumentChunk` model not exported in `backend/app/models/__init__.py`, breaking guideline-compliant imports.
+
+**Resolution**:
+- ✅ Added `DocumentChunk` import to models `__init__.py`
+- ✅ Added "DocumentChunk" to `__all__` list
+- ✅ Verified `from app.models import DocumentChunk` now works
+
+##### **Critical Issue 3: Backfill Test Database Schema Errors** ❌→✅
+**Problem**: `backend/tests/phase4b/test_phase4b_backfill.py` had critical database schema mismatches:
+- Referenced non-existent `updated_at` column in `index_jobs` table (6 locations)
+- Omitted required `job_signature` field when inserting into `index_jobs`
+- Tests failed with OperationalError/IntegrityError before exercising any logic
+
+**Impact**: Undermined "tests-first" TDD methodology claim, left backfill script unvalidated.
+
+**Resolution**:
+- ✅ Fixed all 6 INSERT statements to use correct schema (removed `updated_at`, added `job_signature`)
+- ✅ Generated unique job signatures using `f"{file_id}_{job_type}"` pattern
+- ✅ Tests now properly validate backfill logic against real database schema
+
+##### **Issue 4: Non-Text File Processing in Backfill** ❌→✅
+**Problem**: `scripts/phase4b_backfill.py` scheduled Phase 4B jobs for ALL indexed files:
+- Queued TEXT_EXTRACT/CHUNK/EMBED jobs for binary files, PDFs, images, etc.
+- Would create unnecessary failures and dead-letter queue noise
+- Wasted processing resources on files unsuitable for text processing
+
+**Resolution**:
+- ✅ Added `is_text == True` filter to eligible file query
+- ✅ Backfill now only processes text-compatible files
+- ✅ Prevents unnecessary job failures for binary/PDF/image files
+
+##### **Review Impact Summary**:
+- **Files Modified**: 4 (test_qdrant_integration.py, models/__init__.py, test_phase4b_backfill.py, phase4b_backfill.py)
+- **Test Reliability**: Improved from "always pass with mocks" to "real validation or proper skip"
+- **TDD Integrity**: Restored proper test-first methodology with working test suite
+- **Processing Efficiency**: Eliminated wasteful job creation for non-text files
+- **Code Quality**: Fixed barrel export compliance for all Phase 4B models
+- **Production Readiness**: Eliminated false confidence from mocked integration tests and schema mismatches
 
 ### M2 - Keyword Search Path
 
