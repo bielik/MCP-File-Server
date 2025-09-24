@@ -23,7 +23,7 @@ sys.path.insert(0, backend_root)
 
 from app.database import Base
 from app.models.indexing import IndexedFile, DocumentChunk
-from app.models.workspace import Workspace, Permission, RuleType, PermissionType
+from app.models.workspace import Workspace, Permission
 
 # Import PermissionPostprocessor (to be implemented)
 # from app.services.permission_postprocessor import PermissionPostprocessor

@@ -525,10 +525,11 @@ class SearchService:
 
             # Add file type filtering
             if file_types:
-                placeholders = ", ".join([f":ext{i}" for i in range(len(file_types))])
-                base_query += f" AND f.path GLOB '*{placeholders}'"
+                type_conditions = []
                 for i, ext in enumerate(file_types):
+                    type_conditions.append(f"f.path GLOB :ext{i}")
                     sql_params[f"ext{i}"] = f"*{ext}"
+                base_query += f" AND ({' OR '.join(type_conditions)})"
 
             # Add date range filtering
             if date_from:
@@ -539,15 +540,15 @@ class SearchService:
                 base_query += " AND f.mtime_epoch <= :date_to"
                 sql_params["date_to"] = date_to
 
-            # Add ordering and pagination
-            base_query += " ORDER BY fts.rank DESC, f.path, c.ordinal"
-
-            # Handle cursor pagination
+            # Handle cursor pagination before ordering
             if cursor:
                 cursor_value = self._decode_cursor(cursor, "rank")
                 if cursor_value:
                     base_query += " AND fts.rank < :cursor_rank"
                     sql_params["cursor_rank"] = cursor_value
+
+            # Add ordering and pagination
+            base_query += " ORDER BY fts.rank DESC, f.path, c.ordinal"
 
             base_query += " LIMIT :limit"
 

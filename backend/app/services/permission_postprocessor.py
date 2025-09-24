@@ -211,7 +211,7 @@ class PermissionPostprocessor:
             permissions = workspace.permissions
 
             for permission in permissions:
-                if permission.rule_type.value == "allow":
+                if permission.rule_type == "allow":
                     # Add exact path and path patterns
                     path = permission.path.strip("/")  # Normalize path
 
@@ -227,7 +227,7 @@ class PermissionPostprocessor:
             # Handle deny rules by removing patterns (specificity wins)
             deny_patterns = set()
             for permission in permissions:
-                if permission.rule_type.value == "deny":
+                if permission.rule_type == "deny":
                     path = permission.path.strip("/")
                     deny_patterns.add(path)
                     deny_patterns.add(f"{path}/")
