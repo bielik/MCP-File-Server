@@ -41,7 +41,17 @@ def initialize_database():
 
         # Standardized database URL construction (consistent with backend)
         from pathlib import Path
-        db_path = Path(config.DATABASE_PATH)
+        import os
+
+        # In Docker containers, always use /data regardless of DATABASE_PATH env var
+        if os.path.exists('/data'):
+            # Running in Docker container
+            database_path = '/data'
+        else:
+            # Running locally
+            database_path = config.DATABASE_PATH
+
+        db_path = Path(database_path)
 
         # If it's a directory path, append database.db
         if not str(db_path).endswith('.db'):
