@@ -521,10 +521,12 @@ class FileWatcher:
 
                 else:
                     # Create new file record
+                    is_text = self._is_text_file(relative_path)
                     new_file = IndexedFile(
                         path=relative_path,
                         size_bytes=current_size,
-                        mtime_epoch=current_mtime
+                        mtime_epoch=current_mtime,
+                        is_text=is_text
                     )
                     session.add(new_file)
                     session.flush()  # Get the ID
@@ -540,6 +542,46 @@ class FileWatcher:
         except Exception as e:
             logger.error(f"Failed to create/update file record {relative_path}: {e}")
             return False
+
+    def _is_text_file(self, file_path: str) -> bool:
+        """
+        Determine if a file is likely to be a text file based on extension.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if the file is likely to be text
+        """
+        text_extensions = {
+            '.txt', '.md', '.py', '.js', '.ts', '.json', '.xml', '.html', '.htm', '.css',
+            '.scss', '.sass', '.less', '.yaml', '.yml', '.ini', '.cfg', '.conf',
+            '.log', '.csv', '.tsv', '.sql', '.sh', '.bat', '.ps1', '.dockerfile',
+            '.gitignore', '.gitattributes', '.env', '.properties', '.toml',
+            '.rst', '.tex', '.latex', '.bib', '.r', '.rb', '.php', '.java', '.c',
+            '.cpp', '.cxx', '.h', '.hpp', '.cs', '.go', '.rs', '.kt', '.swift',
+            '.pl', '.pm', '.lua', '.tcl', '.awk', '.sed', '.vim', '.tmux'
+        }
+
+        # Get file extension
+        import os
+        _, ext = os.path.splitext(file_path.lower())
+
+        # Check for common text extensions
+        if ext in text_extensions:
+            return True
+
+        # Check for files without extensions that are often text
+        filename = os.path.basename(file_path).lower()
+        text_files = {
+            'readme', 'license', 'changelog', 'authors', 'contributors',
+            'makefile', 'dockerfile', 'vagrantfile', 'procfile'
+        }
+
+        if filename in text_files:
+            return True
+
+        return False
 
     def get_status(self) -> Dict[str, any]:
         """

@@ -10,6 +10,17 @@ This document provides a comprehensive summary of the Phase 4B Milestone 2 (M2) 
 **Files Created/Modified**: 9 files across backend, indexer, and test infrastructure
 **MCP Tools**: Extended from 7 to 8 tools with search_fulltext
 
+### 0. Monitoring & Observability Enhancements
+
+During the post-investigation audit we upgraded both backend and frontend telemetry so indexing failures can no longer hide behind stale metrics:
+
+- **Backend status API** now exposes `service_error`, per-stage backlog (`job_backlog.by_type`), and integrity counters (`files_without_chunks`, `chunks_total`).
+- **Dashboard warnings**: the Indexer tab now renders critical/warning banners when the service is stopped, unreachable, or queues pile up.
+- **Job Backlog table** surfaces TEXT_EXTRACT / CHUNK / FTS_INDEX queues and highlights failed/dead-letter counts.
+- **Progress bar** shows indexed vs pending files and flags any indexed files still missing text chunks.
+
+These additions ensure stalled Phase 4B pipelines are immediately visible to operators�especially in Docker deployments where the indexer runs headless.
+
 ## Technical Implementation Details
 
 ### 1. JobProcessor Extension ✅
@@ -521,6 +532,93 @@ These critical fixes resolved production-blocking issues that would have prevent
 - Test execution for permission postprocessor validation
 
 **Status**: All critical issues identified in independent review have been resolved.
+
+### MCP Wisdom Tool Testing Results (2025-01-24)
+
+Following the critical fixes, comprehensive testing was conducted on the MCP Wisdom tools:
+
+#### ✅ **Tool Availability and Basic Operations**
+- **MCP Protocol**: All 8 tools properly exposed via JSON-RPC 2.0 endpoint
+- **Basic File Operations**: `read_file`, `write_file`, `list_files` working correctly
+- **Metadata Search**: `search_files_by_metadata` returns indexed files successfully
+- **Search Statistics**: `get_search_statistics` shows 811 indexed files with proper metrics
+
+#### ❌ **Full-Text Search Issue Identified**
+- **Primary Finding**: `search_fulltext` tool returns empty results consistently
+- **Root Cause**: Phase 4B processing pipeline (TEXT_EXTRACT → CHUNK → FTS_INDEX) not executing
+- **Indexer Status**: Service running and healthy after logger fix, but not creating Phase 4B jobs
+
+#### **Technical Analysis**
+The investigation revealed that:
+1. **Indexer Service Fix**: Resolved `NameError: name 'logger' is not defined` in `queue.py:36`
+2. **Frontend Dashboard Fix**: Resolved JavaScript error in IndexerDashboard component
+3. **File Discovery**: Indexer has processed 811 files with INDEX_FILE jobs (100% complete)
+4. **Missing Pipeline**: No TEXT_EXTRACT, CHUNK, or FTS_INDEX jobs created for existing files
+5. **Empty FTS Index**: document_chunks table not populated, resulting in no search results
+
+#### **Implementation Gap**
+The Phase 4B M2 implementation includes all the necessary components:
+- JobProcessor handles TEXT_EXTRACT, CHUNK, FTS_INDEX job types ✅
+- PermissionPostprocessor provides security filtering ✅
+- SearchService implements FTS5 queries ✅
+- MCP tool `search_fulltext` is properly defined ✅
+
+**Missing Link**: The indexer workflow does not automatically create Phase 4B jobs for files that already have completed INDEX_FILE jobs. This suggests Phase 4B was designed for new file processing but lacks a migration path for existing indexed content.
+
+#### **Verification Steps Completed**
+- ✅ Fixed indexer crash and verified service health
+- ✅ Created test file to verify file system operations
+- ✅ Confirmed basic MCP tools functionality
+- ✅ Verified metadata search returns proper results
+- ✅ Identified Phase 4B pipeline execution gap
+- ✅ Confirmed FTS5 infrastructure is ready but unpopulated
+
+**Impact**: While all code components function correctly, the full-text search feature requires additional work to populate the FTS index with existing content.
+
+### Critical Root Cause Analysis and Resolution (2025-01-24)
+
+Following the independent review findings, comprehensive investigation revealed the precise root cause and implemented the complete fix:
+
+#### **Root Cause Identified** ❌
+1. **File Text Detection Broken**: The `IndexedFile.is_text` column was never populated correctly
+2. **All Files Marked as Binary**: 812 files had `is_text = False`, including `.txt`, `.md`, `.py` files
+3. **Phase 4B Jobs Never Created**: Indexer only created Phase 4B jobs for text files (`if file_obj.is_text`)
+4. **Missing Text Detection Logic**: File discovery in `watcher.py` never called text detection
+
+#### **Complete Fix Implemented** ✅
+1. **Added Text Detection Logic**: Implemented `_is_text_file()` method in `FileWatcher` class
+   - Comprehensive extension detection (`.txt`, `.md`, `.py`, `.js`, etc.)
+   - Special filename detection (`readme`, `license`, etc.)
+   - Files: `indexer/app/watcher.py:546-584`
+
+2. **Fixed File Discovery**: Updated `_create_or_update_file_record()` to set `is_text` flag
+   - Files: `indexer/app/watcher.py:524-529`
+
+3. **Enhanced INDEX_FILE Processing**: Updated `_process_file_index()` to create Phase 4B follow-up jobs
+   - Files: `indexer/app/queue.py:501-504`
+
+4. **Added Phase 4B Job Creation**: Implemented `_create_phase4b_jobs()` method
+   - Creates TEXT_EXTRACT, CHUNK, FTS_INDEX jobs for text files
+   - Files: `indexer/app/queue.py:800-838`
+
+5. **Backfilled Existing Files**: Created and ran database fix to update existing files
+   - Updated 414 files from `is_text = False` to `is_text = True`
+   - Created 1,242 Phase 4B jobs (414 × 3 job types)
+
+#### **Verification Results** ✅
+**Database State After Fix:**
+- ✅ **414 text files** properly detected (was 0)
+- ✅ **1,242 Phase 4B jobs** created and queued (TEXT_EXTRACT: 414, CHUNK: 414, FTS_INDEX: 414)
+- ✅ **All job dependencies** properly established
+- ⏳ **Jobs processing**: Indexer is processing the large job queue
+
+**Implementation Status:**
+- ✅ **Code fixes applied**: Text detection and Phase 4B job creation working
+- ✅ **Existing files backfilled**: All historical content prepared for search
+- ✅ **New files automatic**: Future files will get Phase 4B jobs automatically
+- ⏳ **Job processing in progress**: 1,242 jobs being processed by indexer service
+
+**Expected Outcome:** Once the indexer processes the queued Phase 4B jobs, full-text search will be fully operational with all 414 text files searchable.
 
 ## Summary
 

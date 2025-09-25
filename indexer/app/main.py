@@ -43,23 +43,41 @@ def initialize_database():
         from pathlib import Path
         import os
 
-        # In Docker containers, always use /data regardless of DATABASE_PATH env var
-        if os.path.exists('/data'):
-            # Running in Docker container
-            database_path = '/data'
-        else:
-            # Running locally
-            database_path = config.DATABASE_PATH
+        # Try multiple database paths to resolve Docker/Windows issues
+        possible_db_paths = [
+            '/data/database.db',           # Docker container path
+            './data/database.db',          # Relative path
+            str(Path(config.DATABASE_PATH) / 'database.db') if hasattr(config, 'DATABASE_PATH') else None,
+            '/app/data/database.db',       # Fallback container path
+        ]
 
-        db_path = Path(database_path)
+        # Filter out None values
+        possible_db_paths = [p for p in possible_db_paths if p is not None]
 
-        # If it's a directory path, append database.db
-        if not str(db_path).endswith('.db'):
-            db_path = db_path / 'database.db'
+        db_path = None
+        for path_candidate in possible_db_paths:
+            # Convert to Path object and resolve
+            candidate = Path(path_candidate)
+            logger.info(f"Checking database path: {candidate} (resolved: {candidate.resolve()})")
+
+            # Check if the file exists or if the directory exists (for creation)
+            if candidate.exists() or candidate.parent.exists():
+                db_path = candidate
+                logger.info(f"Using database path: {db_path}")
+                break
+            else:
+                logger.info(f"Path not accessible: {candidate}")
+
+        if db_path is None:
+            # Create default path
+            db_path = Path('./data/database.db')
+            logger.warning(f"No existing database found, creating at: {db_path}")
+            # Ensure directory exists
+            db_path.parent.mkdir(parents=True, exist_ok=True)
 
         database_url = f"sqlite:///{db_path}"
 
-        logger.info(f"Indexer database URL: {database_url}")
+        logger.info(f"Final indexer database URL: {database_url}")
 
         # Use DatabaseBootstrap for proper SQLite configuration
         engine = DatabaseBootstrap.bootstrap_database(

@@ -298,6 +298,13 @@ curl http://localhost:8000/api/system/db-info
 ```
 
 ### 7.3. MCP Tools Testing
+### 7.4. Indexer Dashboard Alerts
+
+The Indexer view in the frontend now mirrors the backend status payload:
+- Surfaces banner alerts whenever the service is stopped, unreachable, or backlog builds up.
+- Shows per-stage queue depth (TEXT_EXTRACT, CHUNK, FTS_INDEX) and highlights failed/dead-letter jobs.
+- Progress bar segments indexed vs pending files and flags any indexed files that still lack text chunks.
+- Pulls `service_error`, `job_backlog`, and `integrity_stats` from `/api/indexer/status`, so Docker operators immediately see if Phase 4B pipelines are stalled.
 
 **Complete MCP Protocol Validation:**
 ```bash

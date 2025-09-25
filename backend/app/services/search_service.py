@@ -555,6 +555,8 @@ class SearchService:
             # Execute the FTS search
             raw_results = session.execute(text(base_query), sql_params).fetchall()
 
+            logger.debug(f"FTS search found {len(raw_results)} chunk results")
+
             # Check if there are more results
             has_more = len(raw_results) > limit
             if has_more:

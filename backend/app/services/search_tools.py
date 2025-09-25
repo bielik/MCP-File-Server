@@ -201,9 +201,12 @@ def search_fulltext(
 
         with next(get_db()) as session:
             # Get the active workspace ID
-            # For now, we'll use workspace ID 1 as default
-            # TODO: Implement proper workspace context detection from MCP session
-            workspace_id = 1
+            from app.crud.workspace import workspace_crud
+            active_workspace = workspace_crud.get_active_workspace(session)
+            if not active_workspace:
+                raise ValueError("No active workspace found. Please activate a workspace first.")
+
+            workspace_id = active_workspace.id
 
             # Perform the search
             results = search_service.search_fulltext(

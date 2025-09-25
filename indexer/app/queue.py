@@ -27,16 +27,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../backend/app'))
 from models.indexing import IndexJob, IndexedFile, JobStatus, ControlSetting, DocumentChunk
 from database import get_db, initialize_database
 
+logger = logging.getLogger(__name__)
+
 # Phase 4B ML imports
 try:
-    from llama_index.core import SimpleDirectoryReader, Document
-    from llama_index.core.node_parser import SimpleNodeParser
+    from llama_index import SimpleDirectoryReader, Document
+    from llama_index.node_parser import SimpleNodeParser
     LLAMA_INDEX_AVAILABLE = True
 except ImportError:
     logger.warning("LlamaIndex not available - Phase 4B features will be limited")
     LLAMA_INDEX_AVAILABLE = False
-
-logger = logging.getLogger(__name__)
 
 
 class JobQueueManager:
@@ -490,8 +490,6 @@ class JobProcessor:
         file_obj = job.file
 
         try:
-            # TODO: Implement actual file processing logic in Phase 4B
-            # For Phase 4A, we'll just mark files as processed
             logger.info(f"Indexing file: {file_obj.path}")
 
             # Simulate processing time
@@ -499,6 +497,11 @@ class JobProcessor:
 
             # Mark job as completed
             self.queue_manager.complete_job(session, job, self.index_version)
+
+            # Phase 4B: Create follow-up jobs for text files
+            if file_obj.is_text:
+                logger.info(f"Creating Phase 4B jobs for text file: {file_obj.path}")
+                self._create_phase4b_jobs(session, file_obj)
 
             logger.debug(f"Successfully indexed file: {file_obj.path}")
             return True
@@ -532,14 +535,15 @@ class JobProcessor:
                 raise ImportError("LlamaIndex is required for text extraction")
 
             # Check if file exists and is readable
-            file_path = Path(file_obj.path)
-            if not file_path.exists():
+            # In container, files are mounted at /source/ but paths in DB are relative
+            container_path = Path("/source") / file_obj.path
+            if not container_path.exists():
                 raise FileNotFoundError(f"File not found: {file_obj.path}")
 
             # Use LlamaIndex to extract text
             try:
                 # Create a document from the file
-                documents = SimpleDirectoryReader(input_files=[str(file_path)]).load_data()
+                documents = SimpleDirectoryReader(input_files=[str(container_path)]).load_data()
 
                 if not documents:
                     raise ValueError(f"No content extracted from {file_obj.path}")
@@ -793,3 +797,43 @@ class JobProcessor:
             logger.error(error_msg)
             self.queue_manager.fail_job(session, job, error_msg)
             return False
+
+    def _create_phase4b_jobs(self, session: Session, file_obj) -> None:
+        """
+        Create Phase 4B follow-up jobs for a text file.
+
+        Args:
+            session: Database session
+            file_obj: IndexedFile object
+        """
+        try:
+            # Define Phase 4B job types in dependency order
+            phase4b_jobs = ["TEXT_EXTRACT", "CHUNK", "FTS_INDEX"]
+
+            for job_type in phase4b_jobs:
+                # Check if job already exists
+                existing_job = session.query(IndexJob).filter(
+                    IndexJob.file_id == file_obj.id,
+                    IndexJob.job_type == job_type
+                ).first()
+
+                if not existing_job:
+                    # Create new Phase 4B job
+                    new_job = IndexJob(
+                        file_id=file_obj.id,
+                        job_type=job_type,
+                        status=JobStatus.PENDING
+                    )
+                    session.add(new_job)
+                    logger.info(f"Created {job_type} job for file: {file_obj.path}")
+                else:
+                    logger.debug(f"Job {job_type} already exists for file: {file_obj.path}")
+
+            # Commit the new jobs
+            session.commit()
+            logger.info(f"Successfully created Phase 4B jobs for: {file_obj.path}")
+
+        except Exception as e:
+            logger.error(f"Failed to create Phase 4B jobs for {file_obj.path}: {e}")
+            session.rollback()
+            raise

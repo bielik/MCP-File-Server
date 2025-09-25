@@ -53,7 +53,8 @@
       "mcp__wisdom__write_file",
       "mcp__browser__browser_hover",
       "mcp__browser__browser_select_option",
-      "mcp__wisdom__list_all_files"
+      "mcp__wisdom__list_all_files",
+      "mcp__wisdom__search_fulltext"
     ],
     "deny": [],
     "ask": []

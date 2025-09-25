@@ -155,6 +155,8 @@ docker-compose.yml.override
 
 # Development database - contains local data
 data/database.db
+data/database.db-shm
+data/database.db-wal
 
 # Test databases
 backend/*.db

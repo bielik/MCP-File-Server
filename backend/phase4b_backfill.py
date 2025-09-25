@@ -20,10 +20,6 @@ from typing import List, Optional
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend/app'))
 
-# Clear any existing SQLAlchemy metadata to avoid table redefinition errors
-from sqlalchemy import MetaData
-MetaData._decl_registry = {}
-
 from database import get_db, initialize_database
 from models.indexing import IndexedFile, IndexJob, JobStatus
 from sqlalchemy.orm import Session
