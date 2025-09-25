@@ -7,13 +7,15 @@ the indexer service, get statistics, and manage indexing operations.
 
 import logging
 import asyncio
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.indexing import IndexedFile, IndexJob, ControlSetting, JobStatus
+from app.models.indexing import IndexedFile, IndexJob, ControlSetting, JobStatus, DocumentChunk
 from app.services.permission_service import check_access
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,9 @@ class IndexerStatusResponse(BaseModel):
     queue_stats: Dict[str, Any]
     file_stats: Dict[str, Any]
     performance_stats: Dict[str, Any]
+    service_error: Optional[str] = None
+    job_backlog: Dict[str, Any]
+    integrity_stats: Dict[str, Any]
 
 
 class FileMetadata(BaseModel):
@@ -127,44 +132,125 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
         throttle_pct = ControlSetting.get_setting(session, "throttle_pct", default=0)
 
         # Get queue statistics
-        queue_stats = {}
+        queue_stats: Dict[str, int] = {}
         for status in JobStatus:
-            count = session.query(IndexJob).filter(IndexJob.status == status.value).count()
-            queue_stats[f"{status.value}_jobs"] = count
+            count = (
+                session.query(func.count(IndexJob.id))
+                .filter(func.lower(IndexJob.status) == status.value)
+                .scalar()
+                or 0
+            )
+            queue_stats[f"{status.value}_jobs"] = int(count)
+
+        # Build job backlog metadata grouped by job type
+        job_backlog: Dict[str, Any] = {
+            "total_pending": 0,
+            "total_processing": 0,
+            "total_failed": 0,
+            "total_dead_letter": 0,
+            "by_type": {}
+        }
+
+        backlog_rows = (
+            session.query(
+                IndexJob.job_type.label("job_type"),
+                func.sum(case((func.lower(IndexJob.status) == JobStatus.PENDING.value, 1), else_=0)).label("pending"),
+                func.sum(case((func.lower(IndexJob.status) == JobStatus.PROCESSING.value, 1), else_=0)).label("processing"),
+                func.sum(case((func.lower(IndexJob.status) == JobStatus.FAILED.value, 1), else_=0)).label("failed"),
+                func.sum(case((func.lower(IndexJob.status) == JobStatus.DEAD_LETTER.value, 1), else_=0)).label("dead_letter"),
+            )
+            .group_by(IndexJob.job_type)
+            .all()
+        )
+
+        for row in backlog_rows:
+            pending = int((row.pending or 0))
+            processing = int((row.processing or 0))
+            failed = int((row.failed or 0))
+            dead_letter = int((row.dead_letter or 0))
+
+            job_backlog["by_type"][row.job_type] = {
+                "pending": pending,
+                "processing": processing,
+                "failed": failed,
+                "dead_letter": dead_letter,
+            }
+            job_backlog["total_pending"] += pending
+            job_backlog["total_processing"] += processing
+            job_backlog["total_failed"] += failed
+            job_backlog["total_dead_letter"] += dead_letter
+
+        job_backlog["total"] = (
+            job_backlog["total_pending"]
+            + job_backlog["total_processing"]
+            + job_backlog["total_failed"]
+            + job_backlog["total_dead_letter"]
+        )
 
         # Get file statistics
         total_files = session.query(IndexedFile).count()
         indexed_files = session.query(IndexedFile).filter(IndexedFile.is_indexed == True).count()
         pending_files = total_files - indexed_files
 
+        # Get text vs non-text file breakdown
+        text_files = session.query(IndexedFile).filter(IndexedFile.is_text == True).count()
+        non_text_files = total_files - text_files
+
         file_stats = {
             "total_files": total_files,
             "indexed_files": indexed_files,
             "pending_files": pending_files,
-            "indexing_progress": (indexed_files / total_files * 100) if total_files > 0 else 100
+            "indexing_progress": (indexed_files / total_files * 100) if total_files > 0 else 100,
+            "text_files": text_files,
+            "non_text_files": non_text_files,
+        }
+
+        # Data integrity checks for downstream signals
+        chunks_total = session.query(func.count(DocumentChunk.id)).scalar() or 0
+        files_without_chunks = (
+            session.query(func.count(IndexedFile.id))
+            .outerjoin(DocumentChunk, DocumentChunk.file_id == IndexedFile.id)
+            .filter(IndexedFile.is_indexed == True)
+            .filter(DocumentChunk.id.is_(None))
+            .scalar()
+            or 0
+        )
+
+        integrity_stats = {
+            "chunks_total": int(chunks_total),
+            "files_without_chunks": int(files_without_chunks),
         }
 
         # Get performance statistics from indexer service
         indexer_status = await _get_indexer_service_status()
-        performance_stats = indexer_status.get("stats", {})
+        service_error = indexer_status.get("error") if isinstance(indexer_status, dict) else None
+        service_info = indexer_status.get("service", {}) if isinstance(indexer_status, dict) else {}
+        raw_stats = indexer_status.get("stats", {}) if isinstance(indexer_status, dict) else {}
+        performance_stats = {} if service_error else dict(raw_stats or {})
 
         # Add queue depth and processing rate
-        pending_jobs = queue_stats.get("pending_jobs", 0) + queue_stats.get("failed_jobs", 0)
-        queue_stats["queue_depth"] = pending_jobs
+        pending_jobs = sum(
+            queue_stats.get(key, 0)
+            for key in ("pending_jobs", "processing_jobs", "failed_jobs", "dead_letter_jobs")
+        )
+        queue_stats["queue_depth"] = int(pending_jobs)
 
         # Calculate estimated completion time
         processing_rate = performance_stats.get("jobs_per_minute", 0)
-        if processing_rate > 0 and pending_jobs > 0:
+        if processing_rate and pending_jobs:
             eta_minutes = pending_jobs / processing_rate
             performance_stats["eta_minutes"] = eta_minutes
 
         return IndexerStatusResponse(
-            is_running=indexer_status.get("service", {}).get("is_running", False),
+            is_running=bool(service_info.get("is_running")) and service_error is None,
             is_paused=is_paused,
             throttle_percentage=throttle_pct,
             queue_stats=queue_stats,
             file_stats=file_stats,
-            performance_stats=performance_stats
+            performance_stats=performance_stats,
+            service_error=service_error,
+            job_backlog=job_backlog,
+            integrity_stats=integrity_stats,
         )
 
     except Exception as e:
@@ -347,6 +433,110 @@ async def list_indexing_jobs(
         raise HTTPException(status_code=500, detail=f"Failed to list jobs: {e}")
 
 
+@router.post("/requeue-dead-letter")
+async def requeue_dead_letter_jobs(session: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Requeue all jobs currently in dead_letter status back to pending.
+
+    This endpoint is used to retry jobs that have failed after multiple attempts
+    and have been moved to dead_letter status. Useful after fixing underlying
+    issues that caused the jobs to fail.
+
+    Returns:
+        Result of the requeue operation including count of requeued jobs
+    """
+    try:
+        # Count dead letter jobs before requeue
+        dead_letter_count = (
+            session.query(IndexJob)
+            .filter(func.lower(IndexJob.status) == JobStatus.DEAD_LETTER.value)
+            .count()
+        )
+
+        if dead_letter_count == 0:
+            return {
+                "status": "no_jobs",
+                "message": "No dead letter jobs found to requeue",
+                "requeued_count": 0
+            }
+
+        # Update all dead letter jobs to pending status and reset retry count
+        updated_count = (
+            session.query(IndexJob)
+            .filter(func.lower(IndexJob.status) == JobStatus.DEAD_LETTER.value)
+            .update({
+                IndexJob.status: JobStatus.PENDING.value,
+                IndexJob.retry_count: 0,
+                IndexJob.last_error: None,
+                IndexJob.claimed_at: None,
+                IndexJob.worker_id: None,
+                IndexJob.next_retry_at: None
+            }, synchronize_session=False)
+        )
+
+        session.commit()
+
+        logger.info(f"Requeued {updated_count} dead letter jobs to pending status")
+        return {
+            "status": "requeued",
+            "message": f"Successfully requeued {updated_count} dead letter jobs",
+            "requeued_count": updated_count
+        }
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to requeue dead letter jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to requeue jobs: {e}")
+
+
+@router.post("/clear-failed")
+async def clear_failed_jobs(session: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Clear all jobs in failed status from the queue.
+
+    This endpoint removes failed jobs from the queue to clean up the job history.
+    Note: This only affects jobs in 'failed' status, not 'dead_letter' status.
+
+    Returns:
+        Result of the clear operation including count of cleared jobs
+    """
+    try:
+        # Count failed jobs before clearing
+        failed_count = (
+            session.query(IndexJob)
+            .filter(func.lower(IndexJob.status) == JobStatus.FAILED.value)
+            .count()
+        )
+
+        if failed_count == 0:
+            return {
+                "status": "no_jobs",
+                "message": "No failed jobs found to clear",
+                "cleared_count": 0
+            }
+
+        # Delete failed jobs
+        deleted_count = (
+            session.query(IndexJob)
+            .filter(func.lower(IndexJob.status) == JobStatus.FAILED.value)
+            .delete(synchronize_session=False)
+        )
+
+        session.commit()
+
+        logger.info(f"Cleared {deleted_count} failed jobs from queue")
+        return {
+            "status": "cleared",
+            "message": f"Successfully cleared {deleted_count} failed jobs",
+            "cleared_count": deleted_count
+        }
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to clear failed jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear jobs: {e}")
+
+
 @router.post("/reindex/{doc_id}")
 async def reindex_file(
     doc_id: str,
@@ -398,6 +588,63 @@ async def reindex_file(
     except Exception as e:
         logger.error(f"Failed to queue reindexing for {doc_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to queue reindexing: {e}")
+
+
+@router.get("/logs")
+async def get_indexer_logs(
+    limit: int = 100,
+    level: str = "error",
+    session: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get recent error logs and failed job information.
+
+    Args:
+        limit: Maximum number of log entries to return
+        level: Log level filter (error, warning, info)
+
+    Returns:
+        Recent logs and failed job information
+    """
+    try:
+        # Get recent failed jobs with error messages
+        failed_jobs = (
+            session.query(IndexJob)
+            .filter(
+                (func.lower(IndexJob.status) == JobStatus.FAILED.value) |
+                (func.lower(IndexJob.status) == JobStatus.DEAD_LETTER.value)
+            )
+            .filter(IndexJob.last_error.is_not(None))
+            .order_by(IndexJob.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # Format job errors as log entries
+        log_entries = []
+        for job in failed_jobs:
+            file_path = job.file.path if job.file else "Unknown file"
+            log_entries.append({
+                "timestamp": job.created_at,
+                "level": "error",
+                "component": "indexer",
+                "job_id": job.id,
+                "job_type": job.job_type,
+                "file_path": file_path,
+                "message": job.last_error or "No error message available",
+                "retry_count": job.retry_count,
+                "status": job.status
+            })
+
+        return {
+            "logs": log_entries,
+            "total_entries": len(log_entries),
+            "timestamp": int(datetime.utcnow().timestamp())
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get indexer logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get logs: {e}")
 
 
 @router.get("/health")
