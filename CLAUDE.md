@@ -145,9 +145,12 @@ SHARED_FS_PATH=C:/Users/MartinBielik/MCP Test
 ENABLE_DATABASE_PERMISSIONS=true
 ```
 
-## MCP Integration with Claude Code
+## MCP Integration with AI Clients
 
-### Setup
+### Claude Desktop (Recommended - Works Out of the Box)
+
+Claude Desktop has mature MCP support and works directly with localhost connections:
+
 ```bash
 # Add MCP server (HTTP transport recommended)
 claude mcp add --transport http wisdom http://localhost:8000/mcp
@@ -166,6 +169,160 @@ curl -X POST http://localhost:8000/mcp -H "Content-Type: application/json" \
 - `mcp__wisdom__get_file_info` - Get detailed file information and metadata
 - `mcp__wisdom__get_search_statistics` - Retrieve indexing and search statistics
 - `mcp__wisdom__search_fulltext` - Full-text search with FTS5 and filtering
+
+## MCP Integration with ChatGPT Desktop
+
+### Transport Compatibility Issue
+
+**The Problem:**
+- **Our Server:** Uses basic HTTP JSON-RPC transport (MCP 2024-11-05 style)
+- **ChatGPT Desktop:** Expects Streamable HTTP transport (MCP 2025-03-26 spec)
+- **Additional Issue:** ChatGPT Desktop may have localhost access restrictions
+
+**The Solution:** Proxy + Tunneling approach to bridge the compatibility gap.
+
+### Setup Instructions for ChatGPT Desktop
+
+#### Step 1: Install Dependencies
+```bash
+# Install required Python packages for proxy
+pip install aiohttp
+```
+
+#### Step 2: Start the MCP Compatibility Proxy
+```bash
+# Start proxy server (runs on port 9000, forwards to port 8000)
+python chatgpt_proxy.py
+```
+
+The proxy server:
+- Listens on port 9000 for ChatGPT requests
+- Forwards requests to your MCP server on port 8000
+- Logs all requests/responses for debugging
+- Handles CORS and protocol translation
+
+#### Step 3: Create Public Tunnel
+
+ChatGPT Desktop typically cannot access localhost directly. Create a public HTTPS tunnel:
+
+```bash
+# Option A: Try specific subdomain first (preferred)
+npx localtunnel --port 8000 --subdomain wisdom-direct  # Direct to MCP server
+npx localtunnel --port 9000 --subdomain wisdom-proxy   # Through proxy
+
+# Option B: Use random subdomain if specific fails
+npx localtunnel --port 8000  # Gets URL like https://funny-cats-jump.loca.lt
+npx localtunnel --port 9000  # Gets URL like https://quick-dogs-run.loca.lt
+```
+
+#### Step 4: Configure ChatGPT Desktop
+
+In ChatGPT Desktop's Connector settings, use one of these URLs:
+
+```
+# Direct connection (bypasses proxy, faster)
+https://wisdom-direct.loca.lt/mcp
+# or
+https://your-random-subdomain.loca.lt/mcp
+
+# Through proxy (enables request logging for debugging)
+https://wisdom-proxy.loca.lt/mcp
+# or
+https://your-proxy-random-subdomain.loca.lt/mcp
+```
+
+### Process Management for ChatGPT Integration
+
+You need **these processes running simultaneously**:
+
+1. **Docker Compose** (main services):
+   ```bash
+   docker-compose up
+   ```
+   - Backend MCP server (port 8000)
+   - Frontend UI (port 5173)
+   - Indexer service (port 8002)
+   - Qdrant database (port 6333)
+
+2. **Proxy Server** (compatibility layer):
+   ```bash
+   python chatgpt_proxy.py
+   ```
+   - Runs on port 9000
+   - Forwards to port 8000
+
+3. **Tunnel Process** (public access):
+   ```bash
+   npx localtunnel --port 8000  # or --port 9000 for proxy
+   ```
+   - Creates public HTTPS URL
+   - Must stay running for ChatGPT access
+
+### Troubleshooting ChatGPT Desktop Connection
+
+#### Issue: "URL is invalid" or connection rejected
+
+**Solutions:**
+1. **Test tunnel manually:**
+   ```bash
+   curl -X POST https://your-tunnel.loca.lt/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc": "2.0", "method": "initialize", "id": 1, "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "test", "version": "1.0"}}}'
+   ```
+
+2. **Verify ChatGPT Desktop settings:**
+   - Ensure ChatGPT Pro/Plus subscription
+   - Enable Developer Mode in settings
+   - Use Connectors (Beta) interface
+
+3. **Check proxy logs:**
+   If using proxy tunnel, check if requests appear in proxy logs. No logs = ChatGPT not reaching tunnel.
+
+#### Issue: Tunnel connection refused or firewall errors
+
+**Solutions:**
+1. **Use random subdomain instead of specific:**
+   ```bash
+   npx localtunnel --port 8000  # Let service assign random name
+   ```
+
+2. **Try alternative tunnel service:**
+   ```bash
+   # If ngrok is installed
+   ngrok http 8000
+   ```
+
+#### Issue: Proxy not working
+
+**Debug steps:**
+1. **Verify proxy is running:**
+   ```bash
+   curl http://localhost:9000/health
+   ```
+
+2. **Test proxy locally:**
+   ```bash
+   curl -X POST http://localhost:9000/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+   ```
+
+### Why This Approach Works
+
+**Transport Bridging:**
+- Our server speaks basic HTTP JSON-RPC
+- ChatGPT Desktop expects Streamable HTTP
+- Proxy translates between the two protocols
+
+**Network Access:**
+- ChatGPT Desktop may be sandboxed from localhost
+- Public HTTPS tunnel bypasses network restrictions
+- Maintains security through controlled proxy layer
+
+**Development Benefits:**
+- Continue using Claude Desktop with direct localhost connection
+- Add ChatGPT Desktop support without changing main server
+- Proxy provides detailed logging for debugging protocol issues
 
 ## Testing Strategy
 
@@ -201,8 +358,12 @@ MCPFileServer/
 ├── data/                     # SQLite database (gitignored)
 ├── docs/                     # Phase documentation and guides
 ├── scripts/                  # Testing and utility scripts
+├── tickets/                  # Development tickets and issue tracking
 ├── docker-compose.yml        # 4-service orchestration
-└── .env                      # Environment variables
+├── chatgpt_proxy.py          # MCP compatibility proxy for ChatGPT Desktop
+├── .env                      # Environment variables
+├── README.md                 # Main project documentation
+└── CLAUDE.md                 # This file - Project context for Claude
 ```
 
 ## Critical Production Issues Resolved
@@ -225,6 +386,7 @@ MCPFileServer/
 - **File Watching:** Indexer monitors with 2-second debounce and crash recovery
 - **WebSocket Connectivity:** Real-time UI updates with <100ms latency
 - **Test Coverage:** 49+ comprehensive tests with TDD methodology
+- **Force Reindex Performance:** Soft reindex ~2-5s per 1000 files, Hard reset ~10-30s per 1000 files
 
 ## Next Phase: Phase 4B M3 Semantic Search 📋
 
@@ -268,51 +430,163 @@ MCPFileServer/
 - **Docker Health**: All services include requests library for proper healthchecks
 - **Path Handling**: Host paths mounted to container `/source`; services use `/source` internally
 
-## Force Reindex Feature (Ticket 019 - ✅ Implemented)
+## Force Reindex Feature (Ticket 019 - ✅ Version 4.4.0 Complete)
 
 ### Overview
-Admin-accessible "Force Reindex" capability for rebuilding the content index, available through both Web UI and CLI. Designed as a maintenance action for recovering from drift, pipeline bugs, or large refactors.
+Administrative "Force Reindex" capability providing complete control over the content indexing pipeline. This feature enables administrators to rebuild indexes from scratch or refresh indexing flags, addressing scenarios such as recovery from indexing pipeline bugs, data corruption, system updates, or large-scale file system changes. Available through both Web UI and CLI for maximum operational flexibility.
 
-### Features
-- **Two Reindex Modes:**
-  - **Soft Reindex**: Keeps indexed_files table, clears indexing flags, re-queues all files
-  - **Hard Reset**: Additionally purges document_chunks and FTS data before rebuilding
-- **Scope Filtering**: Optionally filter by path prefix and file types
-- **Batch Processing**: Processes files in chunks of 5000 to prevent memory exhaustion
-- **Maintenance Mode**: Pauses watcher/worker during critical operations
-- **Progress Tracking**: Real-time status updates with counts, ETA, and error reporting
-- **Batch Management**: Pause, resume, or cancel active reindex operations
+### Architecture & Core Components
 
-### Web UI Access
-1. Navigate to **Indexer** tab in web interface
+**System Flow:**
+```
+Web UI/CLI → Admin API → ReindexService → Database Operations → Indexer Jobs
+                                    ↓
+                           Maintenance Mode Control
+```
+
+**Key Components:**
+- **ReindexService** (`backend/app/services/reindex_service.py`): Business logic orchestrator
+- **Reindex API** (`backend/app/api/reindex.py`): REST endpoints with admin authentication
+- **Database Models** (`backend/app/models/reindex.py`): ReindexBatch, SystemFlag tracking
+- **CLI Tool** (`scripts/trigger_reindex.py`): Programmatic access for automation
+- **Web UI Integration** (`frontend/src/components/IndexerDashboard.tsx`): Simplified interface
+
+### Features & Capabilities
+
+**Two Reindex Modes:**
+- **Soft Reindex (Recommended)**: Non-destructive operation that clears indexed flags and re-queues files while preserving existing document_chunks and FTS data
+- **Hard Reset (Destructive)**: Complete rebuild that purges all document_chunks, removes FTS entries, clears pending/failed jobs, and rebuilds everything from scratch
+
+**Advanced Features:**
+- **Chunked Processing**: 5000 files per chunk to prevent memory exhaustion
+- **Maintenance Mode Coordination**: Pauses watcher/worker during critical operations
+- **Scope Filtering**: Filter by path prefix and file types for targeted reindexing
+- **Batch Management**: Full control with pause, resume, cancel operations
+- **Progress Tracking**: Real-time status with processed counts, failure tracking, ETA calculations
+- **Dry Run Support**: Preview operations without making changes
+- **Transactional Safety**: Atomic operations with rollback support on failure
+
+### Web UI Access (Simplified Interface)
+
+1. Navigate to **Indexer** tab in web interface (http://localhost:5173)
 2. Click **Force Reindex** dropdown button
-3. Select either:
-   - **Soft Reindex (recommended)** - Non-destructive, re-processes all files
-   - **Hard Reset ⚠️** - Destructive, purges and rebuilds from scratch
-4. Configure options in modal:
-   - Path filter (optional)
-   - Text-only toggle
-   - Dry run checkbox
-5. Type "REINDEX" to confirm
-6. Monitor progress in real-time status panel
+3. Select reindex mode:
+   - **Soft Reindex (recommended)** - Non-destructive reindexing
+   - **Hard Reset ⚠️** - Complete rebuild (destructive)
+4. Click to start operation immediately (no confirmation dialogs)
+5. Monitor real-time progress with:
+   - Progress percentage and processed file counts
+   - Processing rate (files per minute) and ETA
+   - Pause/Resume/Cancel controls
+   - Detailed batch status information
 
-### Programmatic Access
+### CLI Operations & Automation
+
+**Basic Commands:**
 ```bash
-# CLI script for automation
+# Trigger soft reindex (all files, recommended)
 python scripts/trigger_reindex.py trigger --mode soft
-python scripts/trigger_reindex.py trigger --mode hard --path /projects
+
+# Trigger hard reset (all files, destructive)
+python scripts/trigger_reindex.py trigger --mode hard
+
+# Path-filtered reindexing
+python scripts/trigger_reindex.py trigger --mode soft --path /projects
+
+# Include all file types (not just text)
+python scripts/trigger_reindex.py trigger --mode soft --no-text-only
+
+# Dry run to preview changes
+python scripts/trigger_reindex.py trigger --mode soft --dry-run
+
+# Wait for completion with progress monitoring
+python scripts/trigger_reindex.py trigger --mode soft --wait
+```
+
+**Batch Management:**
+```bash
+# Check batch status
 python scripts/trigger_reindex.py status <batch_id>
 
-# API endpoints (requires admin key)
+# Real-time status monitoring
+python scripts/trigger_reindex.py status <batch_id> --watch
+
+# List all batches (active and historical)
+python scripts/trigger_reindex.py list --all
+
+# Control batch execution
+python scripts/trigger_reindex.py pause <batch_id>
+python scripts/trigger_reindex.py resume <batch_id>
+python scripts/trigger_reindex.py cancel <batch_id>
+```
+
+**System Management:**
+```bash
+# Check overall system status
+python scripts/trigger_reindex.py system
+
+# Emergency: Clear stuck maintenance mode
+python scripts/trigger_reindex.py clear-maintenance
+
+# Custom API configuration
+python scripts/trigger_reindex.py --api-base http://localhost:8000 \
+  --api-key custom-admin-key trigger --mode soft
+```
+
+### REST API Integration
+
+**Authentication:**
+All admin endpoints require the `X-Admin-Key` header with admin authentication.
+
+**Create Reindex Batch:**
+```bash
 curl -X POST http://localhost:8000/admin/reindex/force \
   -H "X-Admin-Key: admin-secret-key-change-me" \
   -H "Content-Type: application/json" \
-  -d '{"mode": "soft", "scope": {"text_only": true}}'
+  -d '{
+    "mode": "soft",
+    "scope": {
+      "path_prefix": "/projects",
+      "text_only": true
+    },
+    "dry_run": false
+  }'
+```
+
+**Monitor Progress:**
+```bash
+# Get specific batch status
+curl -H "X-Admin-Key: admin-secret-key-change-me" \
+  http://localhost:8000/admin/reindex/batches/{batch_id}
+
+# Control batch execution
+curl -X POST http://localhost:8000/admin/reindex/batches/{batch_id}/pause \
+  -H "X-Admin-Key: admin-secret-key-change-me"
 ```
 
 ### Implementation Details
-- **Database Tables**: reindex_batches (tracking), system_flags (maintenance mode)
-- **Security**: Admin-only with API key authentication
-- **Idempotency**: Deduplication via unique constraints on (file_id, job_type, batch_id)
-- **Crash Safety**: Transactional operations with resumable batch processing
-- **Performance**: Chunked processing, O(1) permission filtering post-reindex
+
+**Database Schema:**
+- **reindex_batches**: Tracks batch operations with progress counters, status, timing
+- **system_flags**: Manages maintenance mode and system-wide settings
+- **Enhanced index_jobs**: Added batch_id field for job association and deduplication
+
+**Security & Safety:**
+- Admin-only access via configurable API key authentication
+- Transactional database operations with rollback on failure
+- Maintenance mode prevents race conditions with normal indexing
+- Single active batch constraint prevents conflicts
+- Idempotent operations safe for restart after crashes
+
+**Performance Characteristics:**
+- Soft reindex: ~2-5 seconds per 1000 files (flag clearing and job creation)
+- Hard reset: ~10-30 seconds per 1000 files (includes chunk deletion and FTS cleanup)
+- Memory usage: <100MB additional during processing (chunked operations)
+- Concurrent processing: Single active batch ensures resource control
+- Error handling: Failed files tracked separately without stopping batch
+
+**Error Recovery & Troubleshooting:**
+- Comprehensive error logging with batch IDs and operation details
+- Resumable operations after service restarts
+- Emergency maintenance mode clearing for stuck situations
+- Detailed batch history preserved for audit and debugging

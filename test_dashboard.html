@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Improvements Test</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 20px auto; padding: 0 20px; background: #f5f5f5; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        h2 { color: #555; margin-top: 0; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .metric { padding: 15px; border-radius: 6px; text-align: center; }
+        .metric-value { font-size: 2em; font-weight: bold; }
+        .metric-label { color: #666; font-size: 0.9em; margin-top: 5px; }
+        .metric-detail { color: #999; font-size: 0.8em; margin-top: 3px; }
+        .blue { background: #e3f2fd; color: #1976d2; }
+        .orange { background: #fff3e0; color: #ef6c00; }
+        .green { background: #e8f5e9; color: #388e3c; }
+        .gray { background: #f5f5f5; color: #616161; }
+        .purple { background: #f3e5f5; color: #7b1fa2; }
+        .alert { background: #fff8e1; border-left: 4px solid #f57c00; padding: 15px; margin: 20px 0; }
+        .success { background: #e8f5e9; border-left: 4px solid #4caf50; }
+        .before { opacity: 0.6; }
+        .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        pre { background: #263238; color: #aed581; padding: 15px; border-radius: 6px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>IndexerDashboard Improvements Test</h1>
+
+    <div class="comparison">
+        <div>
+            <h2>❌ Before (Confusing)</h2>
+            <div class="card before">
+                <h3>Old Metrics</h3>
+                <div class="alert">
+                    <strong>409 jobs waiting in queue</strong><br>
+                    <small>vs "409 dead letter queue files" - which is it?</small>
+                </div>
+                <div class="alert">
+                    <strong>400 indexed files missing text chunks</strong><br>
+                    <small>Misleading - includes 398 non-text files that don't need chunks!</small>
+                </div>
+                <div class="metrics">
+                    <div class="metric gray">
+                        <div class="metric-value">821</div>
+                        <div class="metric-label">Total Files</div>
+                        <div class="metric-detail">✅ 100% Discovered</div>
+                    </div>
+                    <div class="metric gray">
+                        <div class="metric-value">409</div>
+                        <div class="metric-label">Jobs in Queue?</div>
+                        <div class="metric-detail">Contradictory</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h2>✅ After (Clear & Consistent)</h2>
+            <div class="card">
+                <h3>New Improved Metrics</h3>
+                <div id="live-metrics">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Key Improvements Achieved</h2>
+        <ul>
+            <li><strong>Separated pipeline problems</strong> from invalid reindex jobs</li>
+            <li><strong>Text-only focus</strong> for processing metrics</li>
+            <li><strong>Clear distinction:</strong> 821 files = 423 text + 398 non-text</li>
+            <li><strong>Accurate reporting:</strong> Only 1 text file without chunks (not 400!)</li>
+            <li><strong>Invalid jobs identified:</strong> 398 reindex jobs for non-text files (now cleared!)</li>
+            <li><strong>Actionable UI:</strong> Specific buttons for each problem type</li>
+        </ul>
+    </div>
+
+    <script>
+        async function loadMetrics() {
+            try {
+                const response = await fetch('http://localhost:8000/api/indexer/status');
+                const data = await response.json();
+
+                document.getElementById('live-metrics').innerHTML = `
+                    <div class="alert success">
+                        <strong>Clear separation achieved!</strong><br>
+                        <small>All metrics now consistent and meaningful</small>
+                    </div>
+
+                    <h4>📁 File Discovery</h4>
+                    <div class="metrics">
+                        <div class="metric blue">
+                            <div class="metric-value">${data.file_stats.total_files}</div>
+                            <div class="metric-label">Total Files</div>
+                            <div class="metric-detail">✅ Discovered</div>
+                        </div>
+                        <div class="metric orange">
+                            <div class="metric-value">${data.file_stats.text_files}</div>
+                            <div class="metric-label">Text Files</div>
+                            <div class="metric-detail">Processable</div>
+                        </div>
+                        <div class="metric gray">
+                            <div class="metric-value">${data.file_stats.non_text_files}</div>
+                            <div class="metric-label">Non-Text Files</div>
+                            <div class="metric-detail">Images, Binaries</div>
+                        </div>
+                        <div class="metric green">
+                            <div class="metric-value">${data.file_stats.text_files_with_chunks || 0}</div>
+                            <div class="metric-label">Fully Processed</div>
+                            <div class="metric-detail">${data.file_stats.text_processing_progress?.toFixed(1) || 0}% of text files</div>
+                        </div>
+                    </div>
+
+                    <h4>📊 Text Processing Results</h4>
+                    <div class="metrics">
+                        <div class="metric purple">
+                            <div class="metric-value">${data.integrity_stats.text_files_without_chunks}</div>
+                            <div class="metric-label">Text Files Failed</div>
+                            <div class="metric-detail">Actually need attention</div>
+                        </div>
+                        <div class="metric green">
+                            <div class="metric-value">${data.integrity_stats.invalid_reindex_jobs}</div>
+                            <div class="metric-label">Invalid Jobs</div>
+                            <div class="metric-detail">Cleared! (was 398)</div>
+                        </div>
+                    </div>
+
+                    <h4>API Response Sample</h4>
+                    <pre>{
+  "file_stats": {
+    "total_files": ${data.file_stats.total_files},
+    "text_files": ${data.file_stats.text_files},
+    "non_text_files": ${data.file_stats.non_text_files},
+    "text_files_with_chunks": ${data.file_stats.text_files_with_chunks || 0},
+    "text_processing_progress": ${data.file_stats.text_processing_progress?.toFixed(1) || 0}
+  },
+  "integrity_stats": {
+    "text_files_without_chunks": ${data.integrity_stats.text_files_without_chunks},
+    "invalid_reindex_jobs": ${data.integrity_stats.invalid_reindex_jobs}
+  }
+}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('live-metrics').innerHTML = `
+                    <div class="alert">Error loading metrics: ${error.message}</div>
+                `;
+            }
+        }
+
+        loadMetrics();
+        // Refresh every 5 seconds
+        setInterval(loadMetrics, 5000);
+    </script>
+</body>
+</html>

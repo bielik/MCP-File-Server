@@ -93,12 +93,8 @@ const IndexerDashboard: React.FC = () => {
 
   // Force Reindex state
   const [reindexModalOpen, setReindexModalOpen] = useState(false);
-  const [reindexStep, setReindexStep] = useState(1);
   const [reindexConfig, setReindexConfig] = useState({
     mode: 'soft' as 'soft' | 'hard',
-    pathPrefix: '',
-    textOnly: true,
-    dryRun: false,
   });
   const [reindexBatchId, setReindexBatchId] = useState<string | null>(null);
   const [reindexStatus, setReindexStatus] = useState<any>(null);
@@ -230,6 +226,30 @@ const IndexerDashboard: React.FC = () => {
     window.open(`${apiBase}/api/indexer/logs`, '_blank');
   };
 
+  const handleClearInvalidJobs = async () => {
+    setControlLoading('clear-invalid');
+    try {
+      const response = await fetch(`${apiBase}/api/indexer/clear-invalid-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Clear invalid jobs failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Clear invalid jobs result:', result);
+
+      await fetchStatus();
+    } catch (err) {
+      console.error('Clear invalid jobs failed:', err);
+      setError(err instanceof Error ? err.message : 'Clear invalid jobs operation failed');
+    } finally {
+      setControlLoading(null);
+    }
+  };
+
   // Format utilities
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -275,25 +295,30 @@ const IndexerDashboard: React.FC = () => {
         body: JSON.stringify({
           mode: reindexConfig.mode,
           scope: {
-            path_prefix: reindexConfig.pathPrefix || null,
-            text_only: reindexConfig.textOnly,
+            path_prefix: null,
+            text_only: false,
           },
-          dry_run: reindexConfig.dryRun,
+          dry_run: false,
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `HTTP ${response.status}`);
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.detail || errorMessage;
+        } catch (e) {
+          // If response isn't JSON, use the status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
       setReindexBatchId(result.batch_id);
 
-      if (!reindexConfig.dryRun) {
-        // Start polling for status
-        fetchReindexStatus(result.batch_id);
-      }
+      // Start polling for status
+      fetchReindexStatus(result.batch_id);
 
       return result;
     } catch (err) {
@@ -454,6 +479,12 @@ const IndexerDashboard: React.FC = () => {
   const indexedPercent = totalFiles > 0 ? Math.min(100, (indexedFiles / totalFiles) * 100) : 0;
   const pendingPercent = totalFiles > 0 ? Math.max(0, Math.min(100 - indexedPercent, (pendingFiles / totalFiles) * 100)) : 0;
 
+  // Calculate pipeline problems - safe to access at top level
+  const pipelineJobTypes = ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'];
+  const pipelineBacklog = backlogByTypeEntries.filter(([jobType]) => pipelineJobTypes.includes(jobType));
+  const pipelineProblems = pipelineBacklog.reduce((total, [, counts]) =>
+    total + (counts.failed || 0) + (counts.dead_letter || 0), 0);
+
   const alerts: AlertMessage[] = [];
 
   if (status) {
@@ -472,38 +503,53 @@ const IndexerDashboard: React.FC = () => {
       });
     }
 
-    if (queueDepth > 0) {
+    // Separate reindex jobs for clearer alerts (pipelineProblems already calculated at top level)
+    const reindexBacklog = backlogByTypeEntries.filter(([jobType]) => jobType === 'reindex_file');
+
+    if (pipelineProblems > 0) {
+      const problemDetails = pipelineBacklog
+        .filter(([, counts]) => (counts.failed || 0) + (counts.dead_letter || 0) > 0)
+        .map(([jobType, counts]) => {
+          const parts: string[] = [];
+          if (counts.failed > 0) parts.push(`${counts.failed} failed`);
+          if (counts.dead_letter > 0) parts.push(`${counts.dead_letter} dead-letter`);
+          return `${formatJobType(jobType)}: ${parts.join(', ')}`;
+        });
+
       alerts.push({
         severity: 'warning',
-        title: `${queueDepth} job${queueDepth === 1 ? '' : 's'} waiting in queue`,
+        title: `${pipelineProblems} text processing job${pipelineProblems === 1 ? '' : 's'} need attention`,
+        detail: problemDetails.join(' | '),
       });
     }
 
-    const pendingByTypeSummary = backlogByTypeEntries
-      .filter(([, counts]) => counts.pending > 0 || counts.failed > 0 || counts.dead_letter > 0)
-      .map(([jobType, counts]) => {
-        const parts: string[] = [`${counts.pending} pending`];
-        if (counts.failed > 0) {
-          parts.push(`${counts.failed} failed`);
-        }
-        if (counts.dead_letter > 0) {
-          parts.push(`${counts.dead_letter} dead-letter`);
-        }
-        return `${formatJobType(jobType)}: ${parts.join(', ')}`;
-      });
+    // Reindex job issues (likely invalid jobs for non-text files)
+    const reindexProblems = reindexBacklog.reduce((total, [, counts]) =>
+      total + (counts.failed || 0) + (counts.dead_letter || 0), 0);
 
-    if (pendingByTypeSummary.length > 0) {
-      alerts.push({
-        severity: 'warning',
-        title: 'Job backlog detected',
-        detail: pendingByTypeSummary.join(' | '),
-      });
+    if (reindexProblems > 0) {
+      const invalidJobs = status?.integrity_stats?.invalid_reindex_jobs ?? 0;
+      if (invalidJobs > 0) {
+        alerts.push({
+          severity: 'warning',
+          title: `${invalidJobs} invalid reindex job${invalidJobs === 1 ? '' : 's'} for non-text files`,
+          detail: 'These jobs can be safely cleared as non-text files don\'t require text processing',
+        });
+      } else {
+        alerts.push({
+          severity: 'warning',
+          title: `${reindexProblems} reindex job${reindexProblems === 1 ? '' : 's'} need attention`,
+        });
+      }
     }
 
-    if (missingChunks > 0) {
+    // Only warn about missing chunks for TEXT files
+    const textFilesWithoutChunks = status?.integrity_stats?.text_files_without_chunks ?? 0;
+    if (textFilesWithoutChunks > 0) {
       alerts.push({
         severity: 'warning',
-        title: `${missingChunks} indexed ${missingChunks === 1 ? 'file' : 'files'} missing text chunks`,
+        title: `${textFilesWithoutChunks} text ${textFilesWithoutChunks === 1 ? 'file' : 'files'} failed processing`,
+        detail: 'These text files were indexed but failed to create searchable chunks',
       });
     }
   }
@@ -668,22 +714,31 @@ const IndexerDashboard: React.FC = () => {
 
       {/* File Overview */}
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">📁 File Overview</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">📁 File Discovery</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">{totalFiles}</div>
             <div className="text-sm text-gray-600">Total Files</div>
-            <div className="text-xs text-green-600 mt-1">✅ 100% Discovered</div>
+            <div className="text-xs text-green-600 mt-1">✅ Discovered</div>
           </div>
           <div className="text-center p-4 bg-orange-50 rounded-lg">
             <div className="text-2xl font-bold text-orange-600">{status?.file_stats?.text_files || 0}</div>
             <div className="text-sm text-gray-600">Text Files</div>
-            <div className="text-xs text-gray-500 mt-1">Documents, Code</div>
+            <div className="text-xs text-gray-500 mt-1">Processable</div>
           </div>
           <div className="text-center p-4 bg-gray-50 rounded-lg">
             <div className="text-2xl font-bold text-gray-600">{status?.file_stats?.non_text_files || 0}</div>
             <div className="text-sm text-gray-600">Non-Text Files</div>
             <div className="text-xs text-gray-500 mt-1">Images, Binaries</div>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">{status?.file_stats?.text_files_with_chunks || 0}</div>
+            <div className="text-sm text-gray-600">Fully Processed</div>
+            <div className="text-xs text-gray-500 mt-1">
+              {status?.file_stats?.text_files ?
+                `${((status.file_stats.text_files_with_chunks || 0) / status.file_stats.text_files * 100).toFixed(1)}% of text files`
+                : '0% of text files'}
+            </div>
           </div>
         </div>
       </div>
@@ -709,14 +764,21 @@ const IndexerDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {backlogByTypeEntries.map(([jobType, stats]) => {
+              {backlogByTypeEntries
+                .filter(([jobType]) => ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType))
+                .sort(([jobTypeA], [jobTypeB]) => {
+                  // Sort in pipeline order: TEXT_EXTRACT -> CHUNK -> FTS_INDEX
+                  const order = { 'TEXT_EXTRACT': 1, 'CHUNK': 2, 'FTS_INDEX': 3 };
+                  return order[jobTypeA] - order[jobTypeB];
+                })
+                .map(([jobType, stats]) => {
                 const completed = stats.completed || 0;
                 const stageName = jobType === 'TEXT_EXTRACT' ? '1. Text Extract' :
                                 jobType === 'CHUNK' ? '2. Chunking' :
                                 jobType === 'FTS_INDEX' ? '3. FTS Index' : jobType;
 
                 return (
-                  <tr key={jobType} className={jobType === 'index_file' ? 'hidden' : ''}>
+                  <tr key={jobType}>
                     <td className="px-4 py-2 text-sm font-medium text-gray-900">{stageName}</td>
                     <td className="px-4 py-2 text-center text-sm text-green-600 font-medium">{completed}</td>
                     <td className="px-4 py-2 text-center text-sm text-yellow-600">{stats.processing || 0}</td>
@@ -735,35 +797,47 @@ const IndexerDashboard: React.FC = () => {
         </div>
 
         <div className="mt-4 text-sm text-gray-600">
-          <strong>Total Jobs Created:</strong> {
-            backlogByTypeEntries.reduce((total, [jobType, stats]) => {
-              if (['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType)) {
-                return total + (stats.completed || 0) + (stats.pending || 0) + (stats.processing || 0) + (stats.failed || 0) + (stats.dead_letter || 0);
-              }
-              return total;
-            }, 0)
-          }
-          <span className="ml-2 text-green-600">
-            ({backlogByTypeEntries.reduce((total, [jobType, stats]) => {
-              return ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType) ? total + (stats.completed || 0) : total;
-            }, 0)} completed)
-          </span>
-          {queueDepth > 0 && (
-            <span className="ml-4 text-orange-600 font-medium">
-              ⚠️ {queueDepth} jobs need attention
-            </span>
-          )}
+          {(() => {
+            const pipelineJobs = backlogByTypeEntries
+              .filter(([jobType]) => ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType))
+              .reduce((total, [jobType, stats]) =>
+                total + (stats.completed || 0) + (stats.pending || 0) + (stats.processing || 0) + (stats.failed || 0) + (stats.dead_letter || 0), 0);
+            const pipelineCompleted = backlogByTypeEntries
+              .filter(([jobType]) => ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType))
+              .reduce((total, [jobType, stats]) => total + (stats.completed || 0), 0);
+            const pipelineProblems = backlogByTypeEntries
+              .filter(([jobType]) => ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType))
+              .reduce((total, [jobType, stats]) => total + (stats.failed || 0) + (stats.dead_letter || 0), 0);
+
+            return (
+              <>
+                <strong>Pipeline Jobs:</strong> {pipelineJobs} total
+                <span className="ml-2 text-green-600">({pipelineCompleted} completed)</span>
+                {pipelineProblems > 0 && (
+                  <span className="ml-2 text-orange-600 font-medium">
+                    ⚠️ {pipelineProblems} need attention
+                  </span>
+                )}
+                <div className="mt-1 text-xs text-gray-500">
+                  Note: Only showing text processing pipeline jobs. Excludes reindex_file jobs which are managed separately.
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
       {/* Content Extraction Results */}
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Content Extraction Results</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Text Processing Results</h3>
+        <div className="mb-4 text-sm text-gray-600">
+          Results based on {status?.file_stats?.text_files || 0} text files (excludes {status?.file_stats?.non_text_files || 0} non-text files)
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-xl font-bold text-green-600">{jobBacklog?.by_type?.['FTS_INDEX']?.completed || 0}</div>
+            <div className="text-xl font-bold text-green-600">{status?.file_stats?.text_files_with_chunks || 0}</div>
             <div className="text-sm text-gray-600">Successfully Processed</div>
-            <div className="text-xs text-gray-500 mt-1">Files</div>
+            <div className="text-xs text-gray-500 mt-1">Text Files</div>
           </div>
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-xl font-bold text-blue-600">{totalChunks}</div>
@@ -772,17 +846,20 @@ const IndexerDashboard: React.FC = () => {
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-lg">
             <div className="text-xl font-bold text-purple-600">
-              {totalChunks > 0 ? (totalChunks / Math.max(1, jobBacklog?.by_type?.['CHUNK']?.completed || 0)).toFixed(1) : '0'}
+              {(status?.file_stats?.text_files_with_chunks || 0) > 0 ?
+                (totalChunks / Math.max(1, status?.file_stats?.text_files_with_chunks || 0)).toFixed(1) : '0'}
             </div>
             <div className="text-sm text-gray-600">Avg Chunks/File</div>
-            <div className="text-xs text-gray-500 mt-1">Processing Ratio</div>
+            <div className="text-xs text-gray-500 mt-1">For processed files</div>
           </div>
           <div className="text-center p-4 bg-orange-50 rounded-lg">
             <div className="text-xl font-bold text-orange-600">
-              {(((jobBacklog?.by_type?.['FTS_INDEX']?.completed || 0) / Math.max(1, status?.file_stats?.text_files || 1)) * 100).toFixed(1)}%
+              {status?.file_stats?.text_processing_progress?.toFixed(1) || '0.0'}%
             </div>
-            <div className="text-sm text-gray-600">Searchable Content</div>
-            <div className="text-xs text-gray-500 mt-1">Of Text Files</div>
+            <div className="text-sm text-gray-600">Processing Progress</div>
+            <div className="text-xs text-gray-500 mt-1">
+              {status?.file_stats?.text_files_with_chunks || 0} of {status?.file_stats?.text_files || 0} text files
+            </div>
           </div>
         </div>
       </div>
@@ -804,16 +881,16 @@ const IndexerDashboard: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Processing Rate</span>
-              <span className="text-sm font-medium">{(status?.performance_stats.jobs_per_minute ?? 0).toFixed(1)} jobs/min</span>
+              <span className="text-sm font-medium text-gray-900">{(status?.performance_stats.jobs_per_minute ?? 0).toFixed(1)} jobs/min</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Active Workers</span>
-              <span className="text-sm font-medium">{status?.performance_stats.active_workers || 2}</span>
+              <span className="text-sm font-medium text-gray-900">{status?.performance_stats.active_workers || 2}</span>
             </div>
             {status?.performance_stats.uptime_seconds && (
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Uptime</span>
-                <span className="text-sm font-medium">{formatDuration(status.performance_stats.uptime_seconds)}</span>
+                <span className="text-sm font-medium text-gray-900">{formatDuration(status.performance_stats.uptime_seconds)}</span>
               </div>
             )}
             <div className="flex justify-between">
@@ -827,13 +904,13 @@ const IndexerDashboard: React.FC = () => {
             {status?.watcher_status?.files_monitored !== undefined && status.watcher_status.files_monitored > 0 && (
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Files Monitored</span>
-                <span className="text-sm font-medium">{status.watcher_status.files_monitored}</span>
+                <span className="text-sm font-medium text-gray-900">{status.watcher_status.files_monitored}</span>
               </div>
             )}
             {status?.watcher_status?.last_activity && (
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Last Activity</span>
-                <span className="text-sm font-medium">{formatDateTime(status.watcher_status.last_activity)}</span>
+                <span className="text-sm font-medium text-gray-900">{formatDateTime(status.watcher_status.last_activity)}</span>
               </div>
             )}
           </div>
@@ -849,9 +926,15 @@ const IndexerDashboard: React.FC = () => {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Dead Letter Queue</span>
-              <span className={`text-sm font-medium ${queueDepth > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                {queueDepth} {queueDepth > 0 ? '⚠️' : 'jobs'}
+              <span className="text-sm text-gray-600">Pipeline Jobs Issues</span>
+              <span className={`text-sm font-medium ${pipelineProblems > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                {pipelineProblems} {pipelineProblems > 0 ? '⚠️' : 'jobs'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Invalid Reindex Jobs</span>
+              <span className={`text-sm font-medium ${(status?.integrity_stats?.invalid_reindex_jobs || 0) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                {status?.integrity_stats?.invalid_reindex_jobs || 0} {(status?.integrity_stats?.invalid_reindex_jobs || 0) > 0 ? '⚠️' : 'jobs'}
               </span>
             </div>
             <div className="flex justify-between">
@@ -859,10 +942,14 @@ const IndexerDashboard: React.FC = () => {
               <span className="text-sm font-medium text-green-600">{status?.queue_stats.completed_jobs || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Success Rate</span>
-              <span className="text-sm font-medium">
-                {status?.queue_stats.completed_jobs ?
-                  (((status.queue_stats.completed_jobs) / (status.queue_stats.completed_jobs + queueDepth)) * 100).toFixed(1) : '0'}%
+              <span className="text-sm text-gray-600">Valid Job Success Rate</span>
+              <span className="text-sm font-medium text-gray-900">
+                {(() => {
+                  const completed = status?.queue_stats.completed_jobs || 0;
+                  const validProblems = pipelineProblems; // Exclude invalid reindex jobs
+                  const totalValid = completed + validProblems;
+                  return totalValid > 0 ? ((completed / totalValid) * 100).toFixed(1) : '0';
+                })()}%
               </span>
             </div>
           </div>
@@ -870,26 +957,55 @@ const IndexerDashboard: React.FC = () => {
       </div>
 
       {/* Action Center */}
-      {queueDepth > 0 && (
+      {(pipelineProblems > 0 || (status?.integrity_stats?.invalid_reindex_jobs || 0) > 0) && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-orange-800 mb-3 flex items-center">
             ⚠️ Action Required
           </h3>
-          <div className="space-y-3">
-            <p className="text-sm text-orange-700">
-              <strong>{queueDepth} jobs</strong> are stuck in dead letter after previous errors.
-            </p>
-            <p className="text-sm text-orange-600">
-              ✅ Issues resolved: LlamaIndex installed, imports fixed, container paths corrected
-            </p>
+          <div className="space-y-4">
+            {pipelineProblems > 0 && (
+              <div>
+                <p className="text-sm text-orange-700">
+                  <strong>{pipelineProblems} text processing job{pipelineProblems === 1 ? '' : 's'}</strong> need attention.
+                </p>
+                <p className="text-sm text-orange-600 mt-1">
+                  These jobs failed during the text extraction, chunking, or FTS indexing pipeline.
+                </p>
+              </div>
+            )}
+
+            {(status?.integrity_stats?.invalid_reindex_jobs || 0) > 0 && (
+              <div>
+                <p className="text-sm text-orange-700">
+                  <strong>{status?.integrity_stats?.invalid_reindex_jobs} invalid reindex job{(status?.integrity_stats?.invalid_reindex_jobs || 0) === 1 ? '' : 's'}</strong> for non-text files.
+                </p>
+                <p className="text-sm text-orange-600 mt-1">
+                  These jobs cannot succeed because non-text files don't go through text processing.
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-3 mt-4">
-              <button
-                className="bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
-                onClick={handleRequeueDeadLetter}
-                disabled={controlLoading === 'requeue'}
-              >
-                {controlLoading === 'requeue' ? 'Requeuing...' : 'Requeue Dead Letter Jobs'}
-              </button>
+              {pipelineProblems > 0 && (
+                <button
+                  className="bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+                  onClick={handleRequeueDeadLetter}
+                  disabled={controlLoading === 'requeue'}
+                >
+                  {controlLoading === 'requeue' ? 'Requeuing...' : 'Retry Pipeline Jobs'}
+                </button>
+              )}
+
+              {(status?.integrity_stats?.invalid_reindex_jobs || 0) > 0 && (
+                <button
+                  className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  onClick={handleClearInvalidJobs}
+                  disabled={controlLoading === 'clear-invalid'}
+                >
+                  {controlLoading === 'clear-invalid' ? 'Clearing...' : 'Clear Invalid Jobs'}
+                </button>
+              )}
+
               <button
                 className="bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors disabled:opacity-50"
                 onClick={handleClearFailed}
@@ -897,6 +1013,7 @@ const IndexerDashboard: React.FC = () => {
               >
                 {controlLoading === 'clear' ? 'Clearing...' : 'Clear Failed History'}
               </button>
+
               <button
                 className="border border-orange-600 text-orange-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-50 transition-colors"
                 onClick={handleViewLogs}
@@ -1006,324 +1123,137 @@ const IndexerDashboard: React.FC = () => {
       )}
 
       {/* Force Reindex Modal */}
-      {reindexModalOpen && (
+      {reindexModalOpen && !reindexBatchId && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
             <h3 className="text-lg font-bold mb-4">Force Reindex</h3>
 
-            {/* Step 1: Scope Selection */}
-            {reindexStep === 1 && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Select the scope of files to reindex.
-                </p>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Ready to start {reindexConfig.mode === 'soft' ? 'soft reindex' : 'hard reset'} on all files.
+              </p>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Path Filter (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={reindexConfig.pathPrefix}
-                    onChange={(e) => setReindexConfig({ ...reindexConfig, pathPrefix: e.target.value })}
-                    placeholder="e.g., /projects"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-gray-500">Leave empty to reindex all files</p>
+              <div className="bg-gray-50 p-4 rounded-md">
+                <div className="text-sm">
+                  <span className="font-medium">Mode:</span> {reindexConfig.mode === 'soft' ? 'Soft Reindex' : 'Hard Reset'}
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="text-only"
-                    checked={reindexConfig.textOnly}
-                    onChange={(e) => setReindexConfig({ ...reindexConfig, textOnly: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="text-only" className="text-sm text-gray-700">
-                    Text files only
-                  </label>
-                </div>
-
-                <div className="flex justify-end space-x-2 mt-6">
-                  <button
-                    onClick={() => {
-                      setReindexModalOpen(false);
-                      setReindexStep(1);
-                    }}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => setReindexStep(3)} // Skip mode selection since it's already chosen
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    Next
-                  </button>
+                <div className="text-sm mt-1">
+                  <span className="font-medium">Scope:</span> All files
                 </div>
               </div>
-            )}
 
-            {/* Step 2: Mode Selection */}
-            {reindexStep === 2 && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Select the reindex mode.
-                </p>
+              {reindexConfig.mode === 'hard' && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded-md">
+                  <p className="text-sm text-red-800">
+                    ⚠️ <strong>Warning:</strong> Hard reset will delete all existing chunks and search data.
+                    Search will be unavailable until reindexing completes.
+                  </p>
+                </div>
+              )}
 
-                <div className="space-y-3">
-                  <label className="flex items-start space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="mode"
-                      value="soft"
-                      checked={reindexConfig.mode === 'soft'}
-                      onChange={(e) => setReindexConfig({ ...reindexConfig, mode: 'soft' })}
-                      className="mt-1"
-                    />
-                    <div>
-                      <div className="font-medium">Soft Reindex (Recommended)</div>
-                      <div className="text-sm text-gray-600">
-                        Clears indexed flags and re-processes files. Keeps existing chunks.
-                      </div>
+              <div className="flex justify-end space-x-2 mt-6">
+                <button
+                  onClick={() => setReindexModalOpen(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await triggerReindex();
+                      // Don't close modal, it will switch to progress view
+                    } catch (err) {
+                      alert(`Failed to trigger reindex: ${err}`);
+                    }
+                  }}
+                  disabled={reindexLoading}
+                  className={`px-4 py-2 text-white rounded-md disabled:opacity-50 ${
+                    reindexConfig.mode === 'hard'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {reindexLoading ? 'Starting...' : 'Start Reindex'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reindex Progress Modal */}
+      {reindexBatchId && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Force Reindex Progress</h3>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Reindex in progress...
+              </p>
+
+              {reindexStatus && (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-4 rounded-md space-y-2">
+                    <div className="text-sm">
+                      <span className="font-medium">Status:</span> {reindexStatus.status}
                     </div>
-                  </label>
-
-                  <label className="flex items-start space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="mode"
-                      value="hard"
-                      checked={reindexConfig.mode === 'hard'}
-                      onChange={(e) => setReindexConfig({ ...reindexConfig, mode: 'hard' })}
-                      className="mt-1"
-                    />
-                    <div>
-                      <div className="font-medium">Hard Reset</div>
-                      <div className="text-sm text-gray-600">
-                        Purges all chunks and rebuilds from scratch. Use for recovering from data corruption.
-                      </div>
-                      <div className="text-sm text-red-600 mt-1">
-                        ⚠️ This will temporarily remove all search results
-                      </div>
+                    <div className="text-sm">
+                      <span className="font-medium">Progress:</span> {reindexStatus.files_processed}/{reindexStatus.candidates_count} files
                     </div>
-                  </label>
-                </div>
-
-                <div className="flex justify-end space-x-2 mt-6">
-                  <button
-                    onClick={() => setReindexStep(1)}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setReindexStep(3)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Dry Run Option */}
-            {reindexStep === 3 && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Choose whether to perform a dry run first.
-                </p>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="dry-run"
-                    checked={reindexConfig.dryRun}
-                    onChange={(e) => setReindexConfig({ ...reindexConfig, dryRun: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="dry-run" className="text-sm text-gray-700">
-                    Dry run - show counts only
-                  </label>
-                </div>
-
-                <div className="flex justify-end space-x-2 mt-6">
-                  <button
-                    onClick={() => setReindexStep(1)} // Go back to scope selection
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setReindexStep(4)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 4: Confirmation */}
-            {reindexStep === 4 && !reindexBatchId && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Review your configuration and confirm.
-                </p>
-
-                <div className="bg-gray-50 p-4 rounded-md space-y-2">
-                  <div className="text-sm">
-                    <span className="font-medium">Mode:</span> {reindexConfig.mode === 'soft' ? 'Soft Reindex' : 'Hard Reset'}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Path:</span> {reindexConfig.pathPrefix || 'All files'}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">File types:</span> {reindexConfig.textOnly ? 'Text files only' : 'All files'}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Dry run:</span> {reindexConfig.dryRun ? 'Yes' : 'No'}
-                  </div>
-                </div>
-
-                {reindexConfig.mode === 'hard' && (
-                  <div className="bg-red-50 border border-red-200 p-3 rounded-md">
-                    <p className="text-sm text-red-800">
-                      ⚠️ <strong>Warning:</strong> Hard reset will delete all existing chunks and search data.
-                      Search will be unavailable until reindexing completes.
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Type "REINDEX" to confirm
-                  </label>
-                  <input
-                    type="text"
-                    id="confirm-text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2 mt-6">
-                  <button
-                    onClick={() => setReindexStep(3)} // Go back to dry run selection
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const confirmInput = (document.getElementById('confirm-text') as HTMLInputElement)?.value;
-                      if (confirmInput !== 'REINDEX') {
-                        alert('Please type REINDEX to confirm');
-                        return;
-                      }
-
-                      try {
-                        const result = await triggerReindex();
-                        setReindexStep(5);
-                      } catch (err) {
-                        alert(`Failed to trigger reindex: ${err}`);
-                      }
-                    }}
-                    disabled={reindexLoading}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {reindexLoading ? 'Starting...' : 'Start Reindex'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 5: Progress */}
-            {(reindexStep === 5 || reindexBatchId) && (
-              <div className="space-y-4">
-                {reindexConfig.dryRun ? (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Dry run complete!
-                    </p>
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <p className="text-sm">
-                        Would reindex <strong>{reindexStatus?.candidates_count || 0}</strong> files
-                      </p>
+                    <div className="text-sm">
+                      <span className="font-medium">Failed:</span> {reindexStatus.files_failed} files
                     </div>
                   </div>
-                ) : (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Reindex in progress...
-                    </p>
 
-                    {reindexStatus && (
-                      <div className="space-y-4">
-                        <div className="bg-gray-50 p-4 rounded-md space-y-2">
-                          <div className="text-sm">
-                            <span className="font-medium">Status:</span> {reindexStatus.status}
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Progress:</span> {reindexStatus.files_processed}/{reindexStatus.candidates_count} files
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Failed:</span> {reindexStatus.files_failed} files
-                          </div>
-                        </div>
-
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ width: `${reindexStatus.progress_percentage}%` }}
-                          ></div>
-                        </div>
-
-                        {reindexStatus.status === 'RUNNING' && (
-                          <div className="flex justify-center space-x-2">
-                            <button
-                              onClick={() => controlReindexBatch('pause')}
-                              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
-                            >
-                              Pause
-                            </button>
-                            <button
-                              onClick={() => controlReindexBatch('cancel')}
-                              className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-
-                        {reindexStatus.status === 'PAUSED' && (
-                          <button
-                            onClick={() => controlReindexBatch('resume')}
-                            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                          >
-                            Resume
-                          </button>
-                        )}
-                      </div>
-                    )}
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      style={{ width: `${reindexStatus.progress_percentage}%` }}
+                    ></div>
                   </div>
-                )}
 
-                <div className="flex justify-end mt-6">
-                  <button
-                    onClick={() => {
-                      setReindexModalOpen(false);
-                      setReindexStep(1);
-                      setReindexBatchId(null);
-                      setReindexStatus(null);
-                    }}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                  >
-                    Close
-                  </button>
+                  {reindexStatus.status === 'RUNNING' && (
+                    <div className="flex justify-center space-x-2">
+                      <button
+                        onClick={() => controlReindexBatch('pause')}
+                        className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                      >
+                        Pause
+                      </button>
+                      <button
+                        onClick={() => controlReindexBatch('cancel')}
+                        className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {reindexStatus.status === 'PAUSED' && (
+                    <button
+                      onClick={() => controlReindexBatch('resume')}
+                      className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                    >
+                      Resume
+                    </button>
+                  )}
                 </div>
+              )}
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setReindexModalOpen(false);
+                    setReindexBatchId(null);
+                    setReindexStatus(null);
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                >
+                  Close
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

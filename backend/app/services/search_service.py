@@ -136,26 +136,48 @@ class SearchService:
                 # Use offset-based pagination as fallback
                 query = query.offset(offset)
 
-            # Apply limit (+1 to check if there are more results)
-            files = query.limit(limit + 1).all()
+            # Use over-fetching strategy to handle permission filtering
+            # Fetch more records to account for files that will be filtered out
+            fetch_multiplier = 5  # Fetch 5x the requested amount
+            max_batch_size = 10000  # Cap the maximum fetch size
+            actual_fetch_limit = min(limit * fetch_multiplier, max_batch_size)
 
-            # Check if there are more results
-            has_more = len(files) > limit
-            if has_more:
-                files = files[:limit]  # Remove the extra record
-
-            # Convert to response format and apply permission filtering
             results = []
-            for file_obj in files:
-                try:
-                    # Check if file is accessible
-                    check_access(file_obj.path, 'read')
+            next_cursor = None
+            has_more = False
+            total_fetched = 0
+            fetch_offset = offset
 
-                    # Apply depth filtering if specified
+            # Keep fetching batches until we have enough allowed results or exhaust the database
+            while len(results) < limit:
+                # Apply current offset and fetch a batch
+                batch_query = query.offset(fetch_offset).limit(actual_fetch_limit + 1)
+                files_batch = batch_query.all()
+
+                if not files_batch:
+                    # No more files in database
+                    break
+
+                # Check if there are more results after this batch
+                batch_has_more = len(files_batch) > actual_fetch_limit
+                if batch_has_more:
+                    files_batch = files_batch[:actual_fetch_limit]
+
+                # Convert batch to file info format for permission filtering
+                batch_file_info = []
+                for file_obj in files_batch:
+                    # Apply depth filtering if specified before permission check
                     if max_depth is not None:
                         path_depth = len(Path(file_obj.path).parts)
                         if path_depth > max_depth:
                             continue
+
+                    # Safely convert timestamp
+                    try:
+                        mtime_iso = datetime.fromtimestamp(file_obj.mtime_epoch).isoformat()
+                    except (OSError, ValueError, OverflowError):
+                        # Handle invalid/too large timestamps
+                        mtime_iso = None
 
                     file_info = {
                         "doc_id": file_obj.doc_id,
@@ -163,37 +185,71 @@ class SearchService:
                         "name": Path(file_obj.path).name,
                         "size_bytes": file_obj.size_bytes,
                         "mtime_epoch": file_obj.mtime_epoch,
-                        "mtime_iso": datetime.fromtimestamp(file_obj.mtime_epoch).isoformat(),
+                        "mtime_iso": mtime_iso,
                         "is_indexed": file_obj.is_indexed,
                         "mime_type": file_obj.mime_type,
                         "discovered_at": file_obj.discovered_at,
                         "last_indexed_at": file_obj.last_indexed_at,
                         "is_directory": False,  # Phase 4A only tracks files
                         "has_ocr": file_obj.has_ocr if hasattr(file_obj, 'has_ocr') else False,
+                        # Store original file object for cursor generation
+                        "_file_obj": file_obj
                     }
+                    batch_file_info.append(file_info)
 
-                    results.append(file_info)
+                # Get active workspace for permission filtering
+                from app.crud import workspace_crud
+                active_workspace = workspace_crud.get_active_workspace(session)
+                if not active_workspace:
+                    logger.warning("No active workspace found - returning empty results")
+                    break
 
-                except Exception:
-                    # File not accessible, skip it
-                    continue
+                # Apply permission filtering using PermissionPostprocessor
+                filtered_batch = self.permission_postprocessor.filter_results(
+                    batch_file_info, active_workspace.id, session
+                )
+
+                # Remove the internal file object from results
+                for result in filtered_batch:
+                    result.pop("_file_obj", None)
+
+                # Add filtered results to our collection
+                remaining_needed = limit - len(results)
+                results.extend(filtered_batch[:remaining_needed])
+
+                total_fetched += len(files_batch)
+
+                # Check if we need to continue fetching
+                if len(results) >= limit:
+                    # We have enough results
+                    has_more = len(filtered_batch) > remaining_needed or batch_has_more
+                    break
+                elif not batch_has_more:
+                    # No more files in database
+                    has_more = False
+                    break
+                else:
+                    # Continue with next batch
+                    fetch_offset += actual_fetch_limit
+                    # Reduce fetch size for subsequent batches to be more conservative
+                    actual_fetch_limit = min(limit * 2, max_batch_size)
 
             # Generate next cursor if there are more results
-            next_cursor = None
-            if has_more and files:
-                last_file = files[-1]
+            if has_more and results:
+                # Use the last result to generate cursor
+                last_result = results[-1]
                 if sort_by == "size":
-                    cursor_value = last_file.size_bytes
+                    cursor_value = last_result["size_bytes"]
                 elif sort_by == "mtime":
-                    cursor_value = last_file.mtime_epoch
+                    cursor_value = last_result["mtime_epoch"]
                 elif sort_by == "discovered":
-                    cursor_value = last_file.discovered_at
+                    cursor_value = last_result["discovered_at"]
                 else:  # path
-                    cursor_value = last_file.path
+                    cursor_value = last_result["path"]
 
                 next_cursor = self._encode_cursor(cursor_value, sort_by)
 
-            logger.debug(f"Listed {len(results)} files (filtered from {len(files)})")
+            logger.debug(f"Listed {len(results)} files (filtered from {total_fetched} fetched files)")
 
             return {
                 "files": results,
@@ -285,43 +341,62 @@ class SearchService:
             else:
                 query = query.order_by(desc(IndexedFile.mtime_epoch))
 
-            # Apply pagination
-            files = query.offset(offset).limit(limit).all()
+            # Use over-fetching strategy to handle permission filtering
+            fetch_multiplier = 3  # More conservative multiplier for metadata search
+            max_batch_size = 5000
+            actual_fetch_limit = min(limit * fetch_multiplier, max_batch_size)
 
-            # Convert to response format and apply permission filtering
-            results = []
-            for file_obj in files:
+            # Fetch with over-fetching to account for permission filtering
+            files_batch = query.offset(offset).limit(actual_fetch_limit).all()
+
+            # Convert to response format for permission filtering
+            batch_file_info = []
+            for file_obj in files_batch:
+                # Safely convert timestamp
                 try:
-                    # Check if file is accessible
-                    check_access(file_obj.path, 'read')
+                    mtime_iso = datetime.fromtimestamp(file_obj.mtime_epoch).isoformat()
+                except (OSError, ValueError, OverflowError):
+                    # Handle invalid/too large timestamps
+                    mtime_iso = None
 
-                    file_info = {
-                        "doc_id": file_obj.doc_id,
-                        "path": file_obj.path,
-                        "name": Path(file_obj.path).name,
-                        "size_bytes": file_obj.size_bytes,
-                        "size_human": self._format_file_size(file_obj.size_bytes),
-                        "mtime_epoch": file_obj.mtime_epoch,
-                        "mtime_iso": datetime.fromtimestamp(file_obj.mtime_epoch).isoformat(),
-                        "is_indexed": file_obj.is_indexed,
-                        "mime_type": file_obj.mime_type,
-                        "discovered_at": file_obj.discovered_at,
-                        "last_indexed_at": file_obj.last_indexed_at,
-                        "file_extension": Path(file_obj.path).suffix.lower(),
-                        "directory": str(Path(file_obj.path).parent),
-                    }
+                file_info = {
+                    "doc_id": file_obj.doc_id,
+                    "path": file_obj.path,
+                    "name": Path(file_obj.path).name,
+                    "size_bytes": file_obj.size_bytes,
+                    "size_human": self._format_file_size(file_obj.size_bytes),
+                    "mtime_epoch": file_obj.mtime_epoch,
+                    "mtime_iso": mtime_iso,
+                    "is_indexed": file_obj.is_indexed,
+                    "mime_type": file_obj.mime_type,
+                    "discovered_at": file_obj.discovered_at,
+                    "last_indexed_at": file_obj.last_indexed_at,
+                    "file_extension": Path(file_obj.path).suffix.lower(),
+                    "directory": str(Path(file_obj.path).parent),
+                }
 
-                    # Add search relevance information
-                    if filename_pattern:
-                        file_info["matches_filename"] = filename_pattern.lower() in file_obj.path.lower()
+                # Add search relevance information
+                if filename_pattern:
+                    file_info["matches_filename"] = filename_pattern.lower() in file_obj.path.lower()
 
-                    results.append(file_info)
+                batch_file_info.append(file_info)
 
-                except Exception:
-                    # File not accessible, skip it
-                    continue
+            # Get active workspace for permission filtering
+            from app.crud import workspace_crud
+            active_workspace = workspace_crud.get_active_workspace(session)
+            if not active_workspace:
+                logger.warning("No active workspace found - returning empty results")
+                return []
 
-            logger.info(f"Metadata search returned {len(results)} files (filtered from {len(files)})")
+            # Apply permission filtering using PermissionPostprocessor
+            filtered_results = self.permission_postprocessor.filter_results(
+                batch_file_info, active_workspace.id, session
+            )
+
+            # Return only the requested limit
+            results = filtered_results[:limit]
+
+            logger.info(f"Metadata search returned {len(results)} files (filtered from {len(files_batch)})")
             return results
 
         except Exception as e:

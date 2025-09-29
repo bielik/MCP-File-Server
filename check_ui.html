@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UI Check</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>IndexerDashboard Status Check</h1>
+    <div id="status" class="status loading">Testing indexer API...</div>
+
+    <h2>API Response</h2>
+    <pre id="response"></pre>
+
+    <h2>UI Link</h2>
+    <p><a href="http://localhost:5173" target="_blank">Open MCP KnowledgeExplorer UI</a></p>
+    <p>Navigate to the "Indexer" tab to see the improved dashboard.</p>
+
+    <script>
+        async function checkAPI() {
+            const statusDiv = document.getElementById('status');
+            const responseDiv = document.getElementById('response');
+
+            try {
+                const response = await fetch('http://localhost:8000/api/indexer/status');
+                const data = await response.json();
+
+                statusDiv.textContent = '✅ Indexer API is working! Dashboard should be functional.';
+                statusDiv.className = 'status success';
+
+                responseDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                statusDiv.textContent = '❌ Error accessing API: ' + error.message;
+                statusDiv.className = 'status error';
+                responseDiv.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        checkAPI();
+    </script>
+</body>
+</html>

@@ -52,6 +52,7 @@ origins = [
     f"http://127.0.0.1:{os.getenv('FRONTEND_PORT', 5173)}",
     "http://localhost:5175",  # Additional port for development
     "http://127.0.0.1:5175",  # Additional port for development
+    "*",  # Allow all origins for MCP clients like ChatGPT desktop
 ]
 
 app.add_middleware(
@@ -127,7 +128,7 @@ async def process_mcp_request(request_data: dict) -> dict:
         if method == "initialize":
             # MCP initialization handshake
             init_result = {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": "2025-03-26",
                 "capabilities": {
                     "tools": {
                         "listChanged": True
@@ -232,7 +233,7 @@ def mcp_endpoint_info():
         "message": "MCP WebSocket endpoint available", 
         "protocol": "WebSocket", 
         "upgrade": "required",
-        "mcp_version": "2024-11-05"
+        "mcp_version": "2025-03-26"
     }
 
 @app.websocket("/ws/ui")
@@ -307,7 +308,7 @@ async def websocket_mcp_endpoint(websocket: WebSocket):
                 if method == "initialize":
                     # MCP initialization handshake
                     init_result = {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": "2025-03-26",
                         "capabilities": {
                             "tools": {
                                 "listChanged": True

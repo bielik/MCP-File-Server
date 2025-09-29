@@ -10,7 +10,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy import func, case
+from sqlalchemy import func, case, text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -194,38 +194,80 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
             + job_backlog["total_completed"]
         )
 
-        # Get file statistics
+        # Get file statistics - separate discovery from processing
         total_files = session.query(IndexedFile).count()
-        indexed_files = session.query(IndexedFile).filter(IndexedFile.is_indexed == True).count()
-        pending_files = total_files - indexed_files
+        discovered_files = total_files  # All files have been discovered
 
-        # Get text vs non-text file breakdown
+        # Text vs non-text file breakdown
         text_files = session.query(IndexedFile).filter(IndexedFile.is_text == True).count()
         non_text_files = total_files - text_files
 
+        # Text file processing status
+        text_files_indexed = session.query(IndexedFile).filter(
+            IndexedFile.is_text == True,
+            IndexedFile.is_indexed == True
+        ).count()
+        text_files_pending = text_files - text_files_indexed
+
+        # Text files with actual chunks (fully processed)
+        text_files_with_chunks = (
+            session.query(func.count(func.distinct(DocumentChunk.file_id)))
+            .join(IndexedFile, DocumentChunk.file_id == IndexedFile.id)
+            .filter(IndexedFile.is_text == True)
+            .scalar() or 0
+        )
+
+        # Text files that were indexed but failed to create chunks
+        text_files_failed_processing = text_files_indexed - text_files_with_chunks
+
         file_stats = {
             "total_files": total_files,
-            "indexed_files": indexed_files,
-            "pending_files": pending_files,
-            "indexing_progress": (indexed_files / total_files * 100) if total_files > 0 else 100,
+            "discovered_files": discovered_files,
             "text_files": text_files,
             "non_text_files": non_text_files,
+            "text_files_indexed": text_files_indexed,
+            "text_files_pending": text_files_pending,
+            "text_files_with_chunks": text_files_with_chunks,
+            "text_files_failed_processing": text_files_failed_processing,
+            "text_processing_progress": (text_files_with_chunks / text_files * 100) if text_files > 0 else 100,
+            "discovery_progress": 100.0,  # All files discovered
+            # Keep old fields for backward compatibility
+            "indexed_files": text_files_indexed,  # This was misleading before
+            "pending_files": text_files_pending,
+            "indexing_progress": (text_files_indexed / total_files * 100) if total_files > 0 else 100,
         }
 
-        # Data integrity checks for downstream signals
+        # Enhanced integrity checks
         chunks_total = session.query(func.count(DocumentChunk.id)).scalar() or 0
-        files_without_chunks = (
+
+        # Only count TEXT files without chunks as problematic
+        text_files_without_chunks = (
             session.query(func.count(IndexedFile.id))
             .outerjoin(DocumentChunk, DocumentChunk.file_id == IndexedFile.id)
             .filter(IndexedFile.is_indexed == True)
+            .filter(IndexedFile.is_text == True)
             .filter(DocumentChunk.id.is_(None))
             .scalar()
             or 0
         )
 
+        # Count invalid jobs (reindex_file jobs for non-text files) using raw SQL
+        invalid_result = session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM index_jobs
+                JOIN indexed_files ON index_jobs.file_id = indexed_files.id
+                WHERE index_jobs.job_type = 'reindex_file'
+                AND indexed_files.is_text = 0
+            """)
+        )
+        invalid_reindex_jobs = invalid_result.scalar() or 0
+
         integrity_stats = {
             "chunks_total": int(chunks_total),
-            "files_without_chunks": int(files_without_chunks),
+            "files_without_chunks": int(text_files_without_chunks),  # Only text files
+            "text_files_without_chunks": int(text_files_without_chunks),
+            "invalid_reindex_jobs": int(invalid_reindex_jobs),
         }
 
         # Get performance statistics from indexer service
@@ -544,6 +586,68 @@ async def clear_failed_jobs(session: Session = Depends(get_db)) -> Dict[str, Any
         session.rollback()
         logger.error(f"Failed to clear failed jobs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear jobs: {e}")
+
+
+@router.post("/clear-invalid-jobs")
+async def clear_invalid_jobs(session: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Clear invalid reindex_file jobs for non-text files.
+
+    This endpoint removes reindex_file jobs that were incorrectly created for non-text files.
+    These jobs cannot succeed because non-text files don't go through text processing.
+
+    Returns:
+        Result of the clear operation including count of cleared jobs
+    """
+    try:
+        # Use raw SQL to avoid ORM column issues with batch_id
+        # Count invalid reindex jobs before clearing
+        count_result = session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM index_jobs
+                JOIN indexed_files ON index_jobs.file_id = indexed_files.id
+                WHERE index_jobs.job_type = 'reindex_file'
+                AND indexed_files.is_text = 0
+            """)
+        )
+        invalid_count = count_result.scalar()
+
+        if invalid_count == 0:
+            return {
+                "status": "no_jobs",
+                "message": "No invalid reindex jobs found to clear",
+                "cleared_count": 0
+            }
+
+        # Delete invalid reindex jobs using raw SQL
+        delete_result = session.execute(
+            text("""
+                DELETE FROM index_jobs
+                WHERE id IN (
+                    SELECT index_jobs.id
+                    FROM index_jobs
+                    JOIN indexed_files ON index_jobs.file_id = indexed_files.id
+                    WHERE index_jobs.job_type = 'reindex_file'
+                    AND indexed_files.is_text = 0
+                )
+            """)
+        )
+        deleted_count = delete_result.rowcount
+
+        session.commit()
+
+        logger.info(f"Cleared {deleted_count} invalid reindex jobs for non-text files")
+        return {
+            "status": "cleared",
+            "message": f"Successfully cleared {deleted_count} invalid reindex jobs for non-text files",
+            "cleared_count": deleted_count
+        }
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to clear invalid jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear invalid jobs: {e}")
 
 
 @router.post("/reindex/{doc_id}")
