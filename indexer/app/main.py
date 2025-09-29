@@ -246,12 +246,25 @@ class IndexerService:
 
         while not self.should_stop:
             try:
-                # Check if indexing is paused
+                # Check if indexing is paused or in maintenance mode
                 with next(get_db()) as session:
+                    # Check regular pause
                     if self.queue_manager.is_paused(session):
                         logger.debug("Indexing is paused, sleeping...")
                         await asyncio.sleep(self.config.INDEXER_POLL_INTERVAL)
                         continue
+
+                    # Check maintenance mode (for reindex operations)
+                    try:
+                        # Import here to avoid circular dependency
+                        from models.reindex import SystemFlag
+                        if SystemFlag.is_maintenance_mode(session):
+                            logger.debug("System is in maintenance mode, sleeping...")
+                            await asyncio.sleep(self.config.INDEXER_POLL_INTERVAL)
+                            continue
+                    except Exception as e:
+                        # Continue if can't check maintenance mode (backward compatibility)
+                        logger.debug(f"Could not check maintenance mode: {e}")
 
                 # Process stable files from watcher
                 if self.file_watcher:

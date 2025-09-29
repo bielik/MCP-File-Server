@@ -13,6 +13,7 @@ interface JobBacklogByType {
   processing: number;
   failed: number;
   dead_letter: number;
+  completed: number;
 }
 
 interface AlertMessage {
@@ -89,6 +90,19 @@ const IndexerDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [controlLoading, setControlLoading] = useState<string | null>(null);
+
+  // Force Reindex state
+  const [reindexModalOpen, setReindexModalOpen] = useState(false);
+  const [reindexStep, setReindexStep] = useState(1);
+  const [reindexConfig, setReindexConfig] = useState({
+    mode: 'soft' as 'soft' | 'hard',
+    pathPrefix: '',
+    textOnly: true,
+    dryRun: false,
+  });
+  const [reindexBatchId, setReindexBatchId] = useState<string | null>(null);
+  const [reindexStatus, setReindexStatus] = useState<any>(null);
+  const [reindexLoading, setReindexLoading] = useState(false);
 
   // Resolve API base URL (configurable)
   const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -246,6 +260,91 @@ const IndexerDashboard: React.FC = () => {
       .join(' ');
   };
 
+  // Force Reindex functions
+  const triggerReindex = async () => {
+    setReindexLoading(true);
+    try {
+      const adminKey = localStorage.getItem('adminApiKey') || 'admin-secret-key-change-me';
+
+      const response = await fetch(`${apiBase}/admin/reindex/force`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Key': adminKey,
+        },
+        body: JSON.stringify({
+          mode: reindexConfig.mode,
+          scope: {
+            path_prefix: reindexConfig.pathPrefix || null,
+            text_only: reindexConfig.textOnly,
+          },
+          dry_run: reindexConfig.dryRun,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      setReindexBatchId(result.batch_id);
+
+      if (!reindexConfig.dryRun) {
+        // Start polling for status
+        fetchReindexStatus(result.batch_id);
+      }
+
+      return result;
+    } catch (err) {
+      console.error('Failed to trigger reindex:', err);
+      throw err;
+    } finally {
+      setReindexLoading(false);
+    }
+  };
+
+  const fetchReindexStatus = async (batchId: string) => {
+    try {
+      const adminKey = localStorage.getItem('adminApiKey') || 'admin-secret-key-change-me';
+
+      const response = await fetch(`${apiBase}/admin/reindex/batches/${batchId}`, {
+        headers: {
+          'X-Admin-Key': adminKey,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setReindexStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch reindex status:', err);
+    }
+  };
+
+  const controlReindexBatch = async (action: 'pause' | 'resume' | 'cancel') => {
+    if (!reindexBatchId) return;
+
+    try {
+      const adminKey = localStorage.getItem('adminApiKey') || 'admin-secret-key-change-me';
+
+      const response = await fetch(`${apiBase}/admin/reindex/batches/${reindexBatchId}/${action}`, {
+        method: 'POST',
+        headers: {
+          'X-Admin-Key': adminKey,
+        },
+      });
+
+      if (response.ok) {
+        // Refresh status
+        fetchReindexStatus(reindexBatchId);
+      }
+    } catch (err) {
+      console.error(`Failed to ${action} batch:`, err);
+    }
+  };
+
   // Effect for auto-refresh
   useEffect(() => {
     const fetchData = async () => {
@@ -271,6 +370,36 @@ const IndexerDashboard: React.FC = () => {
       clearInterval(statusInterval);
       clearInterval(listsInterval);
     };
+  }, []);
+
+  // Effect for polling reindex status
+  useEffect(() => {
+    if (!reindexBatchId || !reindexStatus) return;
+
+    // Only poll if batch is still running
+    if (reindexStatus.status === 'RUNNING' || reindexStatus.status === 'PLANNING') {
+      const interval = setInterval(() => {
+        fetchReindexStatus(reindexBatchId);
+      }, 2000); // Poll every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [reindexBatchId, reindexStatus?.status]);
+
+  // Effect for closing dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const dropdown = document.getElementById('reindex-dropdown');
+      const button = document.querySelector('[data-testid="force-reindex-dropdown"]');
+
+      if (dropdown && !dropdown.contains(event.target as Node) &&
+          button && !button.contains(event.target as Node)) {
+        dropdown.classList.add('hidden');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   if (loading && !status) {
@@ -436,6 +565,62 @@ const IndexerDashboard: React.FC = () => {
               }
             </button>
 
+            {/* Force Reindex Dropdown */}
+            <div className="relative inline-block text-left">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dropdown = document.getElementById('reindex-dropdown');
+                    dropdown?.classList.toggle('hidden');
+                  }}
+                  className="inline-flex w-full justify-center gap-x-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                  data-testid="force-reindex-dropdown"
+                >
+                  Force Reindex
+                  <svg className="-mr-1 h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+
+              <div
+                id="reindex-dropdown"
+                className="hidden absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+              >
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setReindexConfig({ ...reindexConfig, mode: 'soft' });
+                      setReindexModalOpen(true);
+                      document.getElementById('reindex-dropdown')?.classList.add('hidden');
+                    }}
+                    className="group flex w-full items-start px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                    data-testid="soft-reindex"
+                  >
+                    <div>
+                      <div className="font-medium">Soft Reindex</div>
+                      <div className="text-xs text-gray-500">Recommended - keeps existing data</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setReindexConfig({ ...reindexConfig, mode: 'hard' });
+                      setReindexModalOpen(true);
+                      document.getElementById('reindex-dropdown')?.classList.add('hidden');
+                    }}
+                    className="group flex w-full items-start px-4 py-3 text-sm text-gray-700 hover:bg-red-50"
+                    data-testid="hard-reset"
+                  >
+                    <div>
+                      <div className="font-medium text-red-600">Hard Reset ⚠️</div>
+                      <div className="text-xs text-red-500">Purges all data - use carefully</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={() => {
                 const newThrottle = status?.throttle_percentage === 0 ? 50 : 0;
@@ -525,8 +710,7 @@ const IndexerDashboard: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {backlogByTypeEntries.map(([jobType, stats]) => {
-                const totalForType = (status?.file_stats?.text_files || 0);
-                const completed = totalForType - (stats.dead_letter || 0);
+                const completed = stats.completed || 0;
                 const stageName = jobType === 'TEXT_EXTRACT' ? '1. Text Extract' :
                                 jobType === 'CHUNK' ? '2. Chunking' :
                                 jobType === 'FTS_INDEX' ? '3. FTS Index' : jobType;
@@ -551,8 +735,19 @@ const IndexerDashboard: React.FC = () => {
         </div>
 
         <div className="mt-4 text-sm text-gray-600">
-          <strong>Total Jobs:</strong> {(status?.file_stats?.text_files || 0) * 3}
-          ({status?.file_stats?.text_files || 0} files × 3 stages)
+          <strong>Total Jobs Created:</strong> {
+            backlogByTypeEntries.reduce((total, [jobType, stats]) => {
+              if (['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType)) {
+                return total + (stats.completed || 0) + (stats.pending || 0) + (stats.processing || 0) + (stats.failed || 0) + (stats.dead_letter || 0);
+              }
+              return total;
+            }, 0)
+          }
+          <span className="ml-2 text-green-600">
+            ({backlogByTypeEntries.reduce((total, [jobType, stats]) => {
+              return ['TEXT_EXTRACT', 'CHUNK', 'FTS_INDEX'].includes(jobType) ? total + (stats.completed || 0) : total;
+            }, 0)} completed)
+          </span>
           {queueDepth > 0 && (
             <span className="ml-4 text-orange-600 font-medium">
               ⚠️ {queueDepth} jobs need attention
@@ -566,7 +761,7 @@ const IndexerDashboard: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Content Extraction Results</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-xl font-bold text-green-600">{Math.max(0, (status?.file_stats?.text_files || 0) - (jobBacklog?.by_type?.['TEXT_EXTRACT']?.dead_letter || 0))}</div>
+            <div className="text-xl font-bold text-green-600">{jobBacklog?.by_type?.['FTS_INDEX']?.completed || 0}</div>
             <div className="text-sm text-gray-600">Successfully Processed</div>
             <div className="text-xs text-gray-500 mt-1">Files</div>
           </div>
@@ -577,14 +772,14 @@ const IndexerDashboard: React.FC = () => {
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-lg">
             <div className="text-xl font-bold text-purple-600">
-              {totalChunks > 0 ? (totalChunks / Math.max(1, (status?.file_stats?.text_files || 0) - (jobBacklog?.by_type?.['CHUNK']?.dead_letter || 0))).toFixed(1) : '0'}
+              {totalChunks > 0 ? (totalChunks / Math.max(1, jobBacklog?.by_type?.['CHUNK']?.completed || 0)).toFixed(1) : '0'}
             </div>
             <div className="text-sm text-gray-600">Avg Chunks/File</div>
             <div className="text-xs text-gray-500 mt-1">Processing Ratio</div>
           </div>
           <div className="text-center p-4 bg-orange-50 rounded-lg">
             <div className="text-xl font-bold text-orange-600">
-              {((Math.max(0, (status?.file_stats?.text_files || 0) - (jobBacklog?.by_type?.['TEXT_EXTRACT']?.dead_letter || 0)) / Math.max(1, status?.file_stats?.text_files || 1)) * 100).toFixed(1)}%
+              {(((jobBacklog?.by_type?.['FTS_INDEX']?.completed || 0) / Math.max(1, status?.file_stats?.text_files || 1)) * 100).toFixed(1)}%
             </div>
             <div className="text-sm text-gray-600">Searchable Content</div>
             <div className="text-xs text-gray-500 mt-1">Of Text Files</div>
@@ -619,6 +814,26 @@ const IndexerDashboard: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Uptime</span>
                 <span className="text-sm font-medium">{formatDuration(status.performance_stats.uptime_seconds)}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">File Watcher</span>
+              <span className={`text-sm font-medium flex items-center ${
+                status?.watcher_status?.is_running ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {status?.watcher_status?.is_running ? '🟢 Active' : '🔴 Inactive'}
+              </span>
+            </div>
+            {status?.watcher_status?.files_monitored !== undefined && status.watcher_status.files_monitored > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Files Monitored</span>
+                <span className="text-sm font-medium">{status.watcher_status.files_monitored}</span>
+              </div>
+            )}
+            {status?.watcher_status?.last_activity && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Last Activity</span>
+                <span className="text-sm font-medium">{formatDateTime(status.watcher_status.last_activity)}</span>
               </div>
             )}
           </div>
@@ -786,6 +1001,329 @@ const IndexerDashboard: React.FC = () => {
             <div className="ml-3">
               <p className="text-sm text-yellow-700">{error}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Force Reindex Modal */}
+      {reindexModalOpen && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Force Reindex</h3>
+
+            {/* Step 1: Scope Selection */}
+            {reindexStep === 1 && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Select the scope of files to reindex.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Path Filter (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reindexConfig.pathPrefix}
+                    onChange={(e) => setReindexConfig({ ...reindexConfig, pathPrefix: e.target.value })}
+                    placeholder="e.g., /projects"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500">Leave empty to reindex all files</p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="text-only"
+                    checked={reindexConfig.textOnly}
+                    onChange={(e) => setReindexConfig({ ...reindexConfig, textOnly: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="text-only" className="text-sm text-gray-700">
+                    Text files only
+                  </label>
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-6">
+                  <button
+                    onClick={() => {
+                      setReindexModalOpen(false);
+                      setReindexStep(1);
+                    }}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setReindexStep(3)} // Skip mode selection since it's already chosen
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Mode Selection */}
+            {reindexStep === 2 && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Select the reindex mode.
+                </p>
+
+                <div className="space-y-3">
+                  <label className="flex items-start space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="mode"
+                      value="soft"
+                      checked={reindexConfig.mode === 'soft'}
+                      onChange={(e) => setReindexConfig({ ...reindexConfig, mode: 'soft' })}
+                      className="mt-1"
+                    />
+                    <div>
+                      <div className="font-medium">Soft Reindex (Recommended)</div>
+                      <div className="text-sm text-gray-600">
+                        Clears indexed flags and re-processes files. Keeps existing chunks.
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="mode"
+                      value="hard"
+                      checked={reindexConfig.mode === 'hard'}
+                      onChange={(e) => setReindexConfig({ ...reindexConfig, mode: 'hard' })}
+                      className="mt-1"
+                    />
+                    <div>
+                      <div className="font-medium">Hard Reset</div>
+                      <div className="text-sm text-gray-600">
+                        Purges all chunks and rebuilds from scratch. Use for recovering from data corruption.
+                      </div>
+                      <div className="text-sm text-red-600 mt-1">
+                        ⚠️ This will temporarily remove all search results
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-6">
+                  <button
+                    onClick={() => setReindexStep(1)}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setReindexStep(3)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Dry Run Option */}
+            {reindexStep === 3 && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Choose whether to perform a dry run first.
+                </p>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="dry-run"
+                    checked={reindexConfig.dryRun}
+                    onChange={(e) => setReindexConfig({ ...reindexConfig, dryRun: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="dry-run" className="text-sm text-gray-700">
+                    Dry run - show counts only
+                  </label>
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-6">
+                  <button
+                    onClick={() => setReindexStep(1)} // Go back to scope selection
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setReindexStep(4)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Confirmation */}
+            {reindexStep === 4 && !reindexBatchId && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Review your configuration and confirm.
+                </p>
+
+                <div className="bg-gray-50 p-4 rounded-md space-y-2">
+                  <div className="text-sm">
+                    <span className="font-medium">Mode:</span> {reindexConfig.mode === 'soft' ? 'Soft Reindex' : 'Hard Reset'}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Path:</span> {reindexConfig.pathPrefix || 'All files'}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">File types:</span> {reindexConfig.textOnly ? 'Text files only' : 'All files'}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Dry run:</span> {reindexConfig.dryRun ? 'Yes' : 'No'}
+                  </div>
+                </div>
+
+                {reindexConfig.mode === 'hard' && (
+                  <div className="bg-red-50 border border-red-200 p-3 rounded-md">
+                    <p className="text-sm text-red-800">
+                      ⚠️ <strong>Warning:</strong> Hard reset will delete all existing chunks and search data.
+                      Search will be unavailable until reindexing completes.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Type "REINDEX" to confirm
+                  </label>
+                  <input
+                    type="text"
+                    id="confirm-text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-6">
+                  <button
+                    onClick={() => setReindexStep(3)} // Go back to dry run selection
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const confirmInput = (document.getElementById('confirm-text') as HTMLInputElement)?.value;
+                      if (confirmInput !== 'REINDEX') {
+                        alert('Please type REINDEX to confirm');
+                        return;
+                      }
+
+                      try {
+                        const result = await triggerReindex();
+                        setReindexStep(5);
+                      } catch (err) {
+                        alert(`Failed to trigger reindex: ${err}`);
+                      }
+                    }}
+                    disabled={reindexLoading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {reindexLoading ? 'Starting...' : 'Start Reindex'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 5: Progress */}
+            {(reindexStep === 5 || reindexBatchId) && (
+              <div className="space-y-4">
+                {reindexConfig.dryRun ? (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Dry run complete!
+                    </p>
+                    <div className="bg-gray-50 p-4 rounded-md">
+                      <p className="text-sm">
+                        Would reindex <strong>{reindexStatus?.candidates_count || 0}</strong> files
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Reindex in progress...
+                    </p>
+
+                    {reindexStatus && (
+                      <div className="space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-md space-y-2">
+                          <div className="text-sm">
+                            <span className="font-medium">Status:</span> {reindexStatus.status}
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">Progress:</span> {reindexStatus.files_processed}/{reindexStatus.candidates_count} files
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">Failed:</span> {reindexStatus.files_failed} files
+                          </div>
+                        </div>
+
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: `${reindexStatus.progress_percentage}%` }}
+                          ></div>
+                        </div>
+
+                        {reindexStatus.status === 'RUNNING' && (
+                          <div className="flex justify-center space-x-2">
+                            <button
+                              onClick={() => controlReindexBatch('pause')}
+                              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                            >
+                              Pause
+                            </button>
+                            <button
+                              onClick={() => controlReindexBatch('cancel')}
+                              className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+
+                        {reindexStatus.status === 'PAUSED' && (
+                          <button
+                            onClick={() => controlReindexBatch('resume')}
+                            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                          >
+                            Resume
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={() => {
+                      setReindexModalOpen(false);
+                      setReindexStep(1);
+                      setReindexBatchId(null);
+                      setReindexStatus(null);
+                    }}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -13,6 +13,7 @@ load_dotenv()
 from app.database import create_db_and_tables, initialize_database
 from app.api.endpoints import router as api_router
 from app.api.indexer import router as indexer_router
+from app.api.reindex import router as reindex_router
 from app.api.websockets import ConnectionManager
 
 # Import MCP services and schemas
@@ -81,6 +82,7 @@ tool_map = {
 
 app.include_router(api_router, prefix="/api")
 app.include_router(indexer_router)
+app.include_router(reindex_router)
 
 @app.get("/")
 def read_root():

@@ -36,6 +36,7 @@ class IndexerStatusResponse(BaseModel):
     service_error: Optional[str] = None
     job_backlog: Dict[str, Any]
     integrity_stats: Dict[str, Any]
+    watcher_status: Optional[Dict[str, Any]] = None
 
 
 class FileMetadata(BaseModel):
@@ -148,6 +149,7 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
             "total_processing": 0,
             "total_failed": 0,
             "total_dead_letter": 0,
+            "total_completed": 0,
             "by_type": {}
         }
 
@@ -158,6 +160,7 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
                 func.sum(case((func.lower(IndexJob.status) == JobStatus.PROCESSING.value, 1), else_=0)).label("processing"),
                 func.sum(case((func.lower(IndexJob.status) == JobStatus.FAILED.value, 1), else_=0)).label("failed"),
                 func.sum(case((func.lower(IndexJob.status) == JobStatus.DEAD_LETTER.value, 1), else_=0)).label("dead_letter"),
+                func.sum(case((func.lower(IndexJob.status) == JobStatus.COMPLETED.value, 1), else_=0)).label("completed"),
             )
             .group_by(IndexJob.job_type)
             .all()
@@ -168,23 +171,27 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
             processing = int((row.processing or 0))
             failed = int((row.failed or 0))
             dead_letter = int((row.dead_letter or 0))
+            completed = int((row.completed or 0))
 
             job_backlog["by_type"][row.job_type] = {
                 "pending": pending,
                 "processing": processing,
                 "failed": failed,
                 "dead_letter": dead_letter,
+                "completed": completed,
             }
             job_backlog["total_pending"] += pending
             job_backlog["total_processing"] += processing
             job_backlog["total_failed"] += failed
             job_backlog["total_dead_letter"] += dead_letter
+            job_backlog["total_completed"] += completed
 
         job_backlog["total"] = (
             job_backlog["total_pending"]
             + job_backlog["total_processing"]
             + job_backlog["total_failed"]
             + job_backlog["total_dead_letter"]
+            + job_backlog["total_completed"]
         )
 
         # Get file statistics
@@ -226,6 +233,7 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
         service_error = indexer_status.get("error") if isinstance(indexer_status, dict) else None
         service_info = indexer_status.get("service", {}) if isinstance(indexer_status, dict) else {}
         raw_stats = indexer_status.get("stats", {}) if isinstance(indexer_status, dict) else {}
+        watcher_status = indexer_status.get("file_watcher", {}) if isinstance(indexer_status, dict) else {}
         performance_stats = {} if service_error else dict(raw_stats or {})
 
         # Add queue depth and processing rate
@@ -251,6 +259,7 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
             service_error=service_error,
             job_backlog=job_backlog,
             integrity_stats=integrity_stats,
+            watcher_status=watcher_status if watcher_status and not service_error else None,
         )
 
     except Exception as e:

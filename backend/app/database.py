@@ -98,6 +98,8 @@ def create_db_and_tables(engine_param=None):
         from app.models.indexing import IndexedFile, IndexJob, ControlSetting
         # Import Phase 4B models for advanced search
         from app.models.indexing import DocumentChunk
+        # Import Force Reindex models
+        from app.models.reindex import ReindexBatch, SystemFlag
     except ImportError as e:
         # In case models aren't available (like during testing)
         print(f"Warning: Could not import all models: {e}")

@@ -267,3 +267,52 @@ MCPFileServer/
 - **Config Shim**: env_config.py re-exports for stable imports across tests/local runs
 - **Docker Health**: All services include requests library for proper healthchecks
 - **Path Handling**: Host paths mounted to container `/source`; services use `/source` internally
+
+## Force Reindex Feature (Ticket 019 - ✅ Implemented)
+
+### Overview
+Admin-accessible "Force Reindex" capability for rebuilding the content index, available through both Web UI and CLI. Designed as a maintenance action for recovering from drift, pipeline bugs, or large refactors.
+
+### Features
+- **Two Reindex Modes:**
+  - **Soft Reindex**: Keeps indexed_files table, clears indexing flags, re-queues all files
+  - **Hard Reset**: Additionally purges document_chunks and FTS data before rebuilding
+- **Scope Filtering**: Optionally filter by path prefix and file types
+- **Batch Processing**: Processes files in chunks of 5000 to prevent memory exhaustion
+- **Maintenance Mode**: Pauses watcher/worker during critical operations
+- **Progress Tracking**: Real-time status updates with counts, ETA, and error reporting
+- **Batch Management**: Pause, resume, or cancel active reindex operations
+
+### Web UI Access
+1. Navigate to **Indexer** tab in web interface
+2. Click **Force Reindex** dropdown button
+3. Select either:
+   - **Soft Reindex (recommended)** - Non-destructive, re-processes all files
+   - **Hard Reset ⚠️** - Destructive, purges and rebuilds from scratch
+4. Configure options in modal:
+   - Path filter (optional)
+   - Text-only toggle
+   - Dry run checkbox
+5. Type "REINDEX" to confirm
+6. Monitor progress in real-time status panel
+
+### Programmatic Access
+```bash
+# CLI script for automation
+python scripts/trigger_reindex.py trigger --mode soft
+python scripts/trigger_reindex.py trigger --mode hard --path /projects
+python scripts/trigger_reindex.py status <batch_id>
+
+# API endpoints (requires admin key)
+curl -X POST http://localhost:8000/admin/reindex/force \
+  -H "X-Admin-Key: admin-secret-key-change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "soft", "scope": {"text_only": true}}'
+```
+
+### Implementation Details
+- **Database Tables**: reindex_batches (tracking), system_flags (maintenance mode)
+- **Security**: Admin-only with API key authentication
+- **Idempotency**: Deduplication via unique constraints on (file_id, job_type, batch_id)
+- **Crash Safety**: Transactional operations with resumable batch processing
+- **Performance**: Chunked processing, O(1) permission filtering post-reindex

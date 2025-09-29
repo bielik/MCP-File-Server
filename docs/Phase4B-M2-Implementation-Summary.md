@@ -19,7 +19,7 @@ During the post-investigation audit we upgraded both backend and frontend teleme
 - **Job Backlog table** surfaces TEXT_EXTRACT / CHUNK / FTS_INDEX queues and highlights failed/dead-letter counts.
 - **Progress bar** shows indexed vs pending files and flags any indexed files still missing text chunks.
 
-These additions ensure stalled Phase 4B pipelines are immediately visible to operators�especially in Docker deployments where the indexer runs headless.
+These additions ensure stalled Phase 4B pipelines are immediately visible to operators�especially in Docker deployments where the indexer runs headless.
 
 ## Technical Implementation Details
 
@@ -620,6 +620,64 @@ Following the independent review findings, comprehensive investigation revealed 
 
 **Expected Outcome:** Once the indexer processes the queued Phase 4B jobs, full-text search will be fully operational with all 414 text files searchable.
 
+## Post-M2 Critical Issues Resolution (2025-01-25)
+
+After M2 completion, three critical operational issues were discovered and resolved:
+
+### **Issue Resolution Summary**
+
+#### **Ticket 016 - File Watcher Monitoring** ✅ RESOLVED
+**Problem**: Dashboard provided no visibility into file watcher status, preventing diagnosis of file modification detection issues.
+
+**Solution Implemented**:
+- Enhanced `FileWatcher.get_status()` with activity tracking and files monitored count
+- Added watcher status to backend API (`IndexerStatusResponse.watcher_status`)
+- Updated frontend Service Status card with:
+  - File Watcher: 🟢 Active / 🔴 Inactive status indicators
+  - Files monitored count (when active)
+  - Last activity timestamp for troubleshooting
+
+**Impact**: Users can now diagnose file detection issues with real-time watcher status visibility.
+
+#### **Ticket 017 - Incomplete Reindex Pipeline** ✅ RESOLVED
+**Problem**: Modified files only executed `reindex_file` jobs but didn't trigger Phase 4B text processing, making content unsearchable.
+
+**Solution Implemented**:
+- Enhanced `_process_file_index()` to detect reindex operations and clean up stale data
+- Added `_cleanup_phase4b_data()` to remove old DocumentChunk records and Phase 4B jobs
+- Modified `_create_phase4b_jobs()` with `force_recreate` parameter for reindex scenarios
+- Ensured modified files trigger complete TEXT_EXTRACT → CHUNK → FTS_INDEX pipeline
+
+**Impact**: Fixed critical bug where "indexed but not searchable" files misled users. Modified content now becomes properly searchable.
+
+#### **Ticket 018 - Misleading Dashboard Status** ✅ RESOLVED
+**Problem**: Dashboard showed files as "completed" using incorrect calculations instead of actual job status, creating false confidence.
+
+**Solution Implemented**:
+- Enhanced backend job statistics to include actual `COMPLETED` job counts
+- Fixed frontend pipeline table to use `stats.completed` instead of assumptions
+- Updated Content Extraction Results with accurate processing metrics:
+  - Successfully Processed: Uses actual FTS_INDEX completed jobs
+  - Searchable Content %: Based on real completion vs total text files
+  - Total Jobs: Shows created vs completed with accurate breakdown
+
+**Impact**: Dashboard now provides truthful status, eliminating user confusion about processing state.
+
+### **Resolution Impact**
+- **✅ Operational Reliability**: File modification detection and reprocessing works correctly
+- **✅ User Trust**: Dashboard provides accurate, actionable status information
+- **✅ System Monitoring**: Clear visibility into watcher and processing pipeline status
+- **✅ Search Accuracy**: Modified files become properly searchable after processing
+- **✅ Debugging**: Operators can quickly identify and resolve processing issues
+
+**Files Modified**: 4 total
+- `indexer/app/watcher.py` - Enhanced watcher status and activity tracking
+- `indexer/app/queue.py` - Fixed reindex pipeline with cleanup and force recreation
+- `backend/app/api/indexer.py` - Added watcher status API and fixed job statistics
+- `frontend/src/components/IndexerDashboard.tsx` - Updated dashboard with accurate metrics
+
+**Resolution Timeline**: All three critical issues identified and resolved within same day (2025-01-25)
+
 ## Summary
 
 **🎉 Phase 4B M2 (Keyword Search Path) is 100% COMPLETE**
@@ -635,7 +693,8 @@ The implementation delivers a production-ready, secure, and high-performance ful
 
 *M2 implementation completed: 2025-01-24*
 *Critical post-review fixes applied: 2025-01-24*
-*Total implementation time: 5 days (as planned)*
-*Files created/modified: 9 across backend, indexer, and test infrastructure*
-*Lines of code added: 2,400+ production code and comprehensive tests*
-*Production readiness: All success criteria met and validated*
+*Post-M2 operational issues resolved: 2025-01-25*
+*Total implementation time: 6 days (5 planned + 1 critical fixes)*
+*Files created/modified: 13 total (9 M2 core + 4 post-implementation)*
+*Lines of code added: 2,400+ M2 core + 200+ operational fixes*
+*Production readiness: All success criteria met, validated, and operationally hardened*

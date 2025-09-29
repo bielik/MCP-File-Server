@@ -9,6 +9,7 @@ import os
 import time
 import logging
 import hashlib
+import threading
 from pathlib import Path
 from typing import Dict, Set, Optional, Tuple
 from datetime import datetime
@@ -25,6 +26,7 @@ from database import get_db, initialize_database
 from app.queue import JobQueueManager
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class FileStabilityTracker:
@@ -153,7 +155,7 @@ class IndexerFileSystemEventHandler(FileSystemEventHandler):
     """
 
     def __init__(self, source_path: str, queue_manager: JobQueueManager,
-                 stability_tracker: FileStabilityTracker):
+                 stability_tracker: FileStabilityTracker, activity_callback=None):
         """
         Initialize event handler.
 
@@ -161,11 +163,13 @@ class IndexerFileSystemEventHandler(FileSystemEventHandler):
             source_path: Root path being monitored
             queue_manager: Job queue manager for creating indexing jobs
             stability_tracker: File stability tracker
+            activity_callback: Optional callback to call when activity occurs
         """
         super().__init__()
         self.source_path = Path(source_path).resolve()
         self.queue_manager = queue_manager
         self.stability_tracker = stability_tracker
+        self.activity_callback = activity_callback
         self.discovery_epoch = int(time.time())
 
         # File extensions to ignore
@@ -247,15 +251,21 @@ class IndexerFileSystemEventHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         """Handle file creation events."""
+        logger.info(f"[EVENT] File created: {event.src_path} (is_directory: {event.is_directory})")
         if not event.is_directory and not self.should_ignore_path(event.src_path):
-            logger.debug(f"File created: {event.src_path}")
+            logger.info(f"File created: {event.src_path}")
             self.stability_tracker.add_file(event.src_path)
+            if self.activity_callback:
+                self.activity_callback()
 
     def on_modified(self, event):
         """Handle file modification events."""
+        logger.info(f"[EVENT] File modified: {event.src_path} (is_directory: {event.is_directory})")
         if not event.is_directory and not self.should_ignore_path(event.src_path):
-            logger.debug(f"File modified: {event.src_path}")
+            logger.info(f"File modified: {event.src_path}")
             self.stability_tracker.add_file(event.src_path)
+            if self.activity_callback:
+                self.activity_callback()
 
     def on_deleted(self, event):
         """Handle file deletion events."""
@@ -353,6 +363,9 @@ class FileWatcher:
         """
         self.source_path = Path(source_path).resolve()
         self.config = config
+        self._last_activity = None  # Track last activity for monitoring
+        self._polling_timer = None  # Timer for polling fallback
+        self._file_mtimes = {}  # Cache for file modification times
 
         # Initialize components
         self.queue_manager = JobQueueManager()
@@ -364,7 +377,8 @@ class FileWatcher:
         self.event_handler = IndexerFileSystemEventHandler(
             source_path=str(self.source_path),
             queue_manager=self.queue_manager,
-            stability_tracker=self.stability_tracker
+            stability_tracker=self.stability_tracker,
+            activity_callback=self._update_activity  # Pass callback for activity tracking
         )
 
         self.observer = Observer()
@@ -390,7 +404,11 @@ class FileWatcher:
             self.observer.start()
             self.is_running = True
 
-            logger.info("File watcher started")
+            # Start polling fallback for Windows Docker environments
+            # This provides a backup mechanism when file system events don't propagate properly
+            self._start_polling_fallback()
+
+            logger.info("File watcher started (with polling fallback)")
 
         except Exception as e:
             logger.error(f"Failed to start file watcher: {e}")
@@ -411,6 +429,21 @@ class FileWatcher:
         Returns:
             Number of stable files processed
         """
+        # Check maintenance mode before processing
+        try:
+            with next(get_db()) as session:
+                # Import here to avoid circular dependency
+                try:
+                    from models.reindex import SystemFlag
+                    if SystemFlag.is_maintenance_mode(session):
+                        logger.debug("System is in maintenance mode, skipping file processing")
+                        return 0
+                except Exception:
+                    # Continue if can't check maintenance mode
+                    pass
+        except Exception:
+            pass
+
         stable_files = self.stability_tracker.check_stable_files()
         processed_count = 0
 
@@ -446,6 +479,18 @@ class FileWatcher:
                 for file_path in self._scan_directory(self.source_path):
                     try:
                         relative_path = str(file_path.relative_to(self.source_path))
+
+                        # Initialize polling cache
+                        try:
+                            stat = os.stat(file_path)
+                            self._file_mtimes[str(file_path)] = {
+                                'mtime': stat.st_mtime,  # Keep float for polling comparison
+                                'mtime_ns': stat.st_mtime_ns,  # Add nanosecond precision for database
+                                'size': stat.st_size
+                            }
+                        except OSError:
+                            pass
+
                         if self._create_or_update_file_record(str(file_path), relative_path):
                             discovered_count += 1
 
@@ -473,11 +518,24 @@ class FileWatcher:
             Path objects for discovered files
         """
         try:
-            for item in directory.iterdir():
-                if item.is_file() and not self.event_handler.should_ignore_path(str(item)):
-                    yield item
-                elif item.is_dir() and not self.event_handler.should_ignore_path(str(item)):
-                    yield from self._scan_directory(item)
+            logger.debug(f"Scanning directory: {directory}")
+            items = list(directory.iterdir())
+            logger.debug(f"Found {len(items)} items in {directory}")
+
+            for item in items:
+                logger.debug(f"Processing item: {item}, is_file: {item.is_file()}, is_dir: {item.is_dir()}")
+                if item.is_file():
+                    should_ignore = self.event_handler.should_ignore_path(str(item))
+                    logger.debug(f"File {item} should_ignore: {should_ignore}")
+                    if not should_ignore:
+                        logger.info(f"Yielding file: {item}")
+                        yield item
+                elif item.is_dir():
+                    should_ignore = self.event_handler.should_ignore_path(str(item))
+                    logger.debug(f"Directory {item} should_ignore: {should_ignore}")
+                    if not should_ignore:
+                        logger.debug(f"Recursing into directory: {item}")
+                        yield from self._scan_directory(item)
         except (PermissionError, OSError) as e:
             logger.warning(f"Cannot access directory {directory}: {e}")
 
@@ -493,8 +551,9 @@ class FileWatcher:
             True if a job was created or file was updated
         """
         try:
+            logger.debug(f"Processing file record for: {relative_path}")
             stat = os.stat(file_path)
-            current_mtime = int(stat.st_mtime)
+            current_mtime = int(stat.st_mtime_ns)  # Use nanosecond precision instead of seconds
             current_size = stat.st_size
 
             with next(get_db()) as session:
@@ -503,9 +562,14 @@ class FileWatcher:
                     IndexedFile.path == relative_path
                 ).first()
 
+                logger.debug(f"File {relative_path} exists in DB: {existing_file is not None}")
+
                 if existing_file:
                     # Check if file needs reindexing
-                    if existing_file.needs_reindexing(current_mtime, current_size):
+                    needs_reindex = existing_file.needs_reindexing(current_mtime, current_size)
+                    logger.debug(f"File {relative_path} needs reindexing: {needs_reindex}")
+
+                    if needs_reindex:
                         logger.debug(f"File needs reindexing: {relative_path}")
 
                         # Update file metadata
@@ -513,11 +577,19 @@ class FileWatcher:
                         existing_file.size_bytes = current_size
                         existing_file.is_indexed = False
 
+                        # CRITICAL FIX: Ensure metadata updates are committed even if job creation fails
+                        session.commit()
+
                         # Create indexing job
-                        job = self.queue_manager.create_job(session, existing_file.id)
+                        job = self.queue_manager.create_job(session, existing_file.id, "reindex_file")
                         if job:
                             logger.debug(f"Created reindexing job for: {relative_path}")
                             return True
+                        else:
+                            logger.debug(f"Job creation failed for {relative_path}, but metadata updated")
+                            return True  # Metadata was still updated successfully
+                    else:
+                        logger.debug(f"File {relative_path} already up-to-date, skipping")
 
                 else:
                     # Create new file record
@@ -531,17 +603,214 @@ class FileWatcher:
                     session.add(new_file)
                     session.flush()  # Get the ID
 
+                    # CRITICAL FIX: Ensure new file record is committed even if job creation fails
+                    session.commit()
+
                     # Create indexing job
-                    job = self.queue_manager.create_job(session, new_file.id)
+                    job = self.queue_manager.create_job(session, new_file.id, "index_file")
                     if job:
                         logger.debug(f"Created indexing job for new file: {relative_path}")
                         return True
+                    else:
+                        logger.debug(f"Job creation failed for new file {relative_path}, but file record created")
+                        return True  # File record was still created successfully
 
                 return False
 
         except Exception as e:
             logger.error(f"Failed to create/update file record {relative_path}: {e}")
             return False
+
+    def _start_polling_fallback(self) -> None:
+        """Start polling fallback mechanism for Windows Docker environments."""
+        polling_interval = 30  # 30 seconds
+        logger.info(f"Starting polling fallback mechanism (interval: {polling_interval}s)")
+
+        def polling_loop():
+            while self.is_running:
+                try:
+                    self._poll_for_changes()
+                    time.sleep(polling_interval)
+                except Exception as e:
+                    logger.error(f"Error in polling loop: {e}")
+                    time.sleep(polling_interval)
+
+        self._polling_timer = threading.Thread(target=polling_loop, daemon=True)
+        self._polling_timer.start()
+
+    def _poll_for_changes(self) -> None:
+        """Poll filesystem for changes as a fallback when Observer events don't work."""
+        try:
+            # Build current file state
+            current_files = {}
+            for file_path in self._scan_directory(self.source_path):
+                try:
+                    stat = os.stat(file_path)
+                    current_files[str(file_path)] = {
+                        'mtime': stat.st_mtime,  # Keep float for polling comparison
+                        'mtime_ns': stat.st_mtime_ns,  # Add nanosecond precision for database
+                        'size': stat.st_size
+                    }
+                except OSError:
+                    continue
+
+            # Compare with cached state
+            changes_detected = 0
+
+            # Check for new or modified files
+            for file_path, current_info in current_files.items():
+                cached_info = self._file_mtimes.get(file_path)
+
+                # Skip files already in stability tracking
+                if file_path in self.stability_tracker.pending_files:
+                    logger.debug(f"[POLLING] Skipping file already in stability tracking: {file_path}")
+                    continue
+
+                if cached_info is None:
+                    # New file
+                    logger.info(f"[POLLING] New file detected: {file_path}")
+                    self._handle_file_change(file_path)
+                    changes_detected += 1
+                elif (cached_info['mtime'] != current_info['mtime'] or
+                      cached_info['size'] != current_info['size']):
+                    # Modified file
+                    logger.info(f"[POLLING] Modified file detected: {file_path}")
+                    self._handle_file_change(file_path)
+                    changes_detected += 1
+
+            # CRITICAL FIX: Add rename detection before treating files as deleted
+            # This prevents duplicate database entries when files are renamed
+            disappeared_files = {}
+            appeared_files = {}
+
+            # Collect disappeared files (files that were cached but not in current scan)
+            for cached_path in list(self._file_mtimes.keys()):
+                if cached_path not in current_files:
+                    cached_info = self._file_mtimes[cached_path]
+                    disappeared_files[cached_path] = cached_info
+
+            # Collect newly appeared files
+            for file_path, current_info in current_files.items():
+                if file_path not in self._file_mtimes:
+                    appeared_files[file_path] = current_info
+
+            # Try to match disappeared files with appeared files by size/mtime
+            # This detects renames and prevents duplicate database entries
+            matched_renames = []
+            for old_path, old_info in disappeared_files.items():
+                for new_path, new_info in appeared_files.items():
+                    # Match by size and mtime (both float and nanosecond precision)
+                    if (old_info['size'] == new_info['size'] and
+                        old_info['mtime'] == new_info['mtime']):
+                        logger.info(f"[POLLING] Rename detected: {old_path} → {new_path}")
+                        self._handle_file_rename(old_path, new_path)
+                        matched_renames.append((old_path, new_path))
+                        changes_detected += 1
+                        break
+
+            # Remove matched files from appeared/disappeared lists
+            for old_path, new_path in matched_renames:
+                disappeared_files.pop(old_path, None)
+                appeared_files.pop(new_path, None)
+
+            # Handle remaining disappeared files as true deletions
+            for cached_path in disappeared_files.keys():
+                logger.info(f"[POLLING] Deleted file detected: {cached_path}")
+                self._handle_file_deletion(cached_path)
+                changes_detected += 1
+
+            # Handle remaining appeared files as new files (already handled above in new file detection)
+
+            # Update cache
+            self._file_mtimes = current_files
+
+            if changes_detected > 0:
+                logger.info(f"[POLLING] Detected {changes_detected} file changes")
+                self._last_activity = time.time()
+
+        except Exception as e:
+            logger.error(f"Error during polling: {e}")
+
+    def _handle_file_change(self, file_path: str) -> None:
+        """Handle file change detected by polling."""
+        try:
+            relative_path = str(Path(file_path).relative_to(self.source_path))
+            if not self.event_handler.should_ignore_path(file_path):
+                self.stability_tracker.add_file(file_path)
+        except Exception as e:
+            logger.error(f"Error handling file change {file_path}: {e}")
+
+    def _handle_file_rename(self, old_path: str, new_path: str) -> None:
+        """
+        Handle file rename detected by polling mechanism.
+
+        CRITICAL FIX: This method updates the existing database record's path instead of
+        creating a duplicate entry, preserving the doc_id and associated chunks.
+
+        Args:
+            old_path: Previous file path
+            new_path: New file path
+        """
+        try:
+            old_relative = str(Path(old_path).relative_to(self.source_path))
+            new_relative = str(Path(new_path).relative_to(self.source_path))
+
+            logger.info(f"Processing rename: {old_relative} → {new_relative}")
+
+            with next(get_db()) as session:
+                # Find existing record by old path
+                existing_file = session.query(IndexedFile).filter(
+                    IndexedFile.path == old_relative
+                ).first()
+
+                if existing_file:
+                    # Update path to new location, preserving all other data
+                    existing_file.path = new_relative
+                    # Mark for reindexing since path changed
+                    existing_file.is_indexed = False
+
+                    # Commit the path update
+                    session.commit()
+
+                    logger.info(f"Updated database record path: {old_relative} → {new_relative}")
+
+                    # Create reindex job for the renamed file
+                    reindex_job = self.queue_manager.create_job(session, existing_file.id, "reindex_file")
+                    if reindex_job:
+                        logger.info(f"Created reindex job for renamed file: {new_relative}")
+                else:
+                    logger.warning(f"No database record found for renamed file: {old_relative}")
+                    # Treat as new file if no existing record
+                    self._handle_file_change(new_path)
+
+        except Exception as e:
+            logger.error(f"Error handling file rename {old_path} → {new_path}: {e}")
+
+    def _handle_file_deletion(self, file_path: str) -> None:
+        """Handle file deletion detected by polling."""
+        try:
+            relative_path = str(Path(file_path).relative_to(self.source_path))
+
+            # Mark file as deleted in database
+            with next(get_db()) as session:
+                existing_file = session.query(IndexedFile).filter(
+                    IndexedFile.path == relative_path
+                ).first()
+
+                if existing_file:
+                    # For now, hard delete the record and its chunks
+                    # TODO: Consider soft delete with deleted_at timestamp
+                    session.delete(existing_file)
+                    session.commit()
+                    logger.info(f"Deleted database record for: {relative_path}")
+
+            # Remove from stability tracking
+            self.stability_tracker.remove_file(file_path)
+            # Remove from cache
+            self._file_mtimes.pop(file_path, None)
+
+        except Exception as e:
+            logger.error(f"Error handling file deletion {file_path}: {e}")
 
     def _is_text_file(self, file_path: str) -> bool:
         """
@@ -583,6 +852,10 @@ class FileWatcher:
 
         return False
 
+    def _update_activity(self) -> None:
+        """Update last activity timestamp for monitoring."""
+        self._last_activity = time.time()
+
     def get_status(self) -> Dict[str, any]:
         """
         Get watcher status information.
@@ -590,9 +863,24 @@ class FileWatcher:
         Returns:
             Dictionary with status information
         """
+        # Get pending files count for monitoring
+        pending_files = self.stability_tracker.get_pending_count() if self.stability_tracker else 0
+
+        # Calculate total files being monitored (pending + recently processed)
+        files_monitored = pending_files
+
+        # Get last activity timestamp
+        last_activity = None
+        if hasattr(self, '_last_activity'):
+            last_activity = self._last_activity
+        elif pending_files > 0:
+            last_activity = time.time()  # If files are pending, activity is current
+
         return {
             "is_running": self.is_running,
             "source_path": str(self.source_path),
-            "pending_stability_checks": self.stability_tracker.get_pending_count(),
-            "observer_alive": self.observer.is_alive() if self.observer else False
+            "pending_stability_checks": pending_files,
+            "observer_alive": self.observer.is_alive() if self.observer else False,
+            "files_monitored": files_monitored,
+            "last_activity": last_activity
         }

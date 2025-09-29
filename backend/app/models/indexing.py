@@ -9,7 +9,7 @@ import hashlib
 from datetime import datetime
 from enum import Enum
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Float, Index, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, Float, Index, ForeignKey
 from sqlalchemy.orm import relationship
 try:
     from app.database import Base
@@ -52,7 +52,7 @@ class IndexedFile(Base):
 
     # File metadata (stored as epoch timestamps for efficiency)
     size_bytes = Column(Integer, nullable=False)
-    mtime_epoch = Column(Integer, nullable=False, index=True)  # Modification time
+    mtime_epoch = Column(BigInteger, nullable=False, index=True)  # Modification time (nanoseconds)
     discovered_at = Column(Integer, nullable=False, index=True)  # When first discovered
     last_indexed_at = Column(Integer, nullable=True)  # When last successfully indexed
 
@@ -102,22 +102,23 @@ class IndexedFile(Base):
 
     def _generate_doc_id(self, path: str, size_bytes: int, mtime_epoch: int) -> str:
         """
-        Generate deterministic document ID from file metadata rather than just path.
+        Generate deterministic document ID from file metadata WITHOUT path dependency.
 
-        This ensures that renames preserve the doc_id while still being deterministic.
-        Uses path + size + mtime to create a unique identifier that persists through renames
-        as long as the file content doesn't change.
+        CRITICAL FIX: Removed path from doc_id generation to prevent duplicates on rename.
+        The doc_id now persists through renames as long as file content doesn't change,
+        solving the issue where renames created duplicate database entries.
 
         Args:
-            path: File path (for initial creation)
+            path: File path (not used in ID generation, kept for API compatibility)
             size_bytes: File size in bytes
             mtime_epoch: Modification time
 
         Returns:
-            Hex-encoded SHA-256 hash of file metadata
+            Hex-encoded SHA-256 hash of file metadata (size + mtime only)
         """
-        # Use initial path + metadata for deterministic ID that survives renames
-        content = f"{path}:{size_bytes}:{mtime_epoch}"
+        # Use ONLY size + mtime for deterministic ID that survives renames
+        # This prevents duplicate entries when files are renamed
+        content = f"{size_bytes}:{mtime_epoch}"
         return hashlib.sha256(content.encode('utf-8')).hexdigest()[:32]
 
     def _compute_file_hash(self) -> str:
@@ -188,6 +189,7 @@ class IndexJob(Base):
     # Job identification and signature
     job_signature = Column(String(128), unique=True, nullable=False, index=True)  # Prevents duplicates
     file_id = Column(Integer, ForeignKey("indexed_files.id"), nullable=False, index=True)
+    batch_id = Column(String(36), nullable=True, index=True)  # Optional batch ID for reindex operations
 
     # Job status and timing
     status = Column(String(16), default=JobStatus.PENDING, nullable=False, index=True)
@@ -223,18 +225,20 @@ class IndexJob(Base):
         {}, # Required empty dict at end for SQLAlchemy
     )
 
-    def __init__(self, file_id: int, job_type: str = "index_file", **kwargs):
+    def __init__(self, file_id: int, job_type: str = "index_file", batch_id: Optional[str] = None, **kwargs):
         """
         Initialize IndexJob with computed values.
 
         Args:
             file_id: ID of the file to be indexed
             job_type: Type of indexing job
+            batch_id: Optional batch ID for reindex operations
             **kwargs: Additional model fields
         """
         super().__init__(**kwargs)
         self.file_id = file_id
         self.job_type = job_type
+        self.batch_id = batch_id
         self.created_at = int(datetime.utcnow().timestamp())
 
         # Generate job signature to prevent duplicates
@@ -244,14 +248,19 @@ class IndexJob(Base):
         """
         Generate unique job signature to prevent duplicates.
 
-        Uses only file_id and job_type to ensure proper de-duplication
-        of identical jobs created moments apart (race conditions between
-        initial scan and file watcher).
+        Uses file_id, job_type, and optionally batch_id to ensure proper de-duplication.
+        For reindex operations with batch_id, allows the same file to be reindexed
+        in different batches while preventing duplicates within a batch.
 
         Returns:
             Hex-encoded hash of job parameters
         """
-        content = f"{self.file_id}:{self.job_type}"
+        if self.batch_id:
+            # Include batch_id for reindex operations to allow per-batch uniqueness
+            content = f"{self.file_id}:{self.job_type}:{self.batch_id}"
+        else:
+            # Standard signature for non-batch operations
+            content = f"{self.file_id}:{self.job_type}"
         return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
     def claim_job(self, worker_id: str) -> bool:

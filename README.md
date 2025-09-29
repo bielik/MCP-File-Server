@@ -71,6 +71,43 @@ cd backend && python -m pytest tests/phase4b/ -v
 - ✅ Temporary database isolation for reliable testing
 - ✅ Graceful skipping when dependencies unavailable
 
+### Force Reindex Operations
+
+Trigger and manage database reindexing operations programmatically:
+
+```bash
+# Trigger soft reindex (keeps existing data)
+python scripts/trigger_reindex.py trigger --mode soft
+
+# Trigger hard reset (purges and rebuilds data)
+python scripts/trigger_reindex.py trigger --mode hard
+
+# Filter by path
+python scripts/trigger_reindex.py trigger --path /projects
+
+# Dry run to see what would be reindexed
+python scripts/trigger_reindex.py trigger --dry-run
+
+# Check batch status
+python scripts/trigger_reindex.py status <batch_id>
+
+# List all batches
+python scripts/trigger_reindex.py list --all
+
+# Control batch execution
+python scripts/trigger_reindex.py pause <batch_id>
+python scripts/trigger_reindex.py resume <batch_id>
+python scripts/trigger_reindex.py cancel <batch_id>
+```
+
+**Features:**
+- ✅ Soft reindex: Clears indexed flags and re-queues files
+- ✅ Hard reset: Purges chunks/FTS data and rebuilds from scratch
+- ✅ Path filtering for targeted reindexing
+- ✅ Dry run capability for safety
+- ✅ Batch management with pause/resume/cancel
+- ✅ Admin authentication via API key
+
 ---
 
 ## 1. Introduction
@@ -295,6 +332,23 @@ curl http://localhost:8000/docs     # API documentation
 
 # Database diagnostic (useful for troubleshooting)
 curl http://localhost:8000/api/system/db-info
+```
+
+**Force Reindex Management:**
+```bash
+# Check reindex system status
+curl http://localhost:8000/admin/reindex/status
+
+# List active reindex batches
+curl -H "X-Admin-Key: admin-secret-key-change-me" \
+  http://localhost:8000/admin/reindex/batches
+
+# Get specific batch status
+curl -H "X-Admin-Key: admin-secret-key-change-me" \
+  http://localhost:8000/admin/reindex/batches/{batch_id}
+
+# Access web UI for visual management
+# Navigate to Indexer tab -> Force Reindex dropdown
 ```
 
 ### 7.3. MCP Tools Testing

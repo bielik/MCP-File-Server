@@ -226,6 +226,10 @@ class JobQueueManager:
         """
         Mark a job as completed and update the associated file.
 
+        CRITICAL FIX: Removed internal commit/rollback to allow proper transaction management
+        by the caller. This prevents the race condition where parent job commits before
+        child jobs are created in the same transaction.
+
         Args:
             session: Database session
             job: Job to mark as completed
@@ -239,11 +243,10 @@ class JobQueueManager:
             if job.file:
                 job.file.mark_indexed(index_version)
 
-            session.commit()
             logger.debug(f"Completed job {job.id}")
+            # Note: No commit here - transaction management is handled by caller
 
         except Exception as e:
-            session.rollback()
             logger.error(f"Failed to complete job {job.id}: {e}")
             raise
 
@@ -477,6 +480,10 @@ class JobProcessor:
         """
         Process a file indexing job.
 
+        CRITICAL FIX: This method now wraps all operations in a single transaction
+        to prevent the "parent completed but no children" race condition that was
+        causing reindex jobs to complete without triggering Phase 4B processing.
+
         Args:
             session: Database session
             job: File indexing job
@@ -488,27 +495,48 @@ class JobProcessor:
             raise ValueError(f"Job {job.id} has no associated file")
 
         file_obj = job.file
+        is_reindex = job.job_type == "reindex_file"
 
         try:
-            logger.info(f"Indexing file: {file_obj.path}")
+            logger.info(f"{'Reindexing' if is_reindex else 'Indexing'} file: {file_obj.path}")
 
-            # Simulate processing time
-            time.sleep(0.1)
+            # Use a single transaction for all operations to ensure atomicity
+            # Note: Don't use session.begin() as session might already be in transaction
+            try:
+                # For reindex operations, clean up existing Phase 4B data first
+                if is_reindex and file_obj.is_text:
+                    logger.info(f"Cleaning up existing Phase 4B data for reindex: {file_obj.path}")
+                    self._cleanup_phase4b_data(session, file_obj)
 
-            # Mark job as completed
-            self.queue_manager.complete_job(session, job, self.index_version)
+                # Simulate processing time
+                time.sleep(0.1)
 
-            # Phase 4B: Create follow-up jobs for text files
-            if file_obj.is_text:
-                logger.info(f"Creating Phase 4B jobs for text file: {file_obj.path}")
-                self._create_phase4b_jobs(session, file_obj)
+                # Phase 4B: Create follow-up jobs for text files BEFORE marking parent complete
+                # This ensures children are created atomically with parent completion
+                if file_obj.is_text:
+                    logger.info(f"Creating Phase 4B jobs for text file: {file_obj.path}")
+                    self._create_phase4b_jobs(session, file_obj, force_recreate=is_reindex)
 
-            logger.debug(f"Successfully indexed file: {file_obj.path}")
+                # Mark parent job as completed AFTER children are created
+                # This prevents the race condition where parent completes but children are never created
+                self.queue_manager.complete_job(session, job, self.index_version)
+
+                # Commit the transaction to ensure atomicity
+                session.commit()
+
+            except Exception as inner_e:
+                # Rollback the transaction on any failure
+                session.rollback()
+                raise inner_e
+
+            # Transaction committed successfully
+            logger.debug(f"Successfully {'reindexed' if is_reindex else 'indexed'} file: {file_obj.path}")
             return True
 
         except Exception as e:
-            error_msg = f"Failed to index file {file_obj.path}: {e}"
+            error_msg = f"Failed to {'reindex' if is_reindex else 'index'} file {file_obj.path}: {e}"
             logger.error(error_msg)
+            # Failure handling should occur outside the transaction
             self.queue_manager.fail_job(session, job, error_msg)
             return False
 
@@ -798,21 +826,69 @@ class JobProcessor:
             self.queue_manager.fail_job(session, job, error_msg)
             return False
 
-    def _create_phase4b_jobs(self, session: Session, file_obj) -> None:
+    def _cleanup_phase4b_data(self, session: Session, file_obj) -> None:
         """
-        Create Phase 4B follow-up jobs for a text file.
+        Clean up existing Phase 4B data for a file before reindexing.
+
+        CRITICAL FIX: Removed internal commit/rollback to allow proper transaction management
+        by the caller. This ensures cleanup operations are part of the same transaction as
+        parent job completion and child job creation.
 
         Args:
             session: Database session
             file_obj: IndexedFile object
         """
         try:
+            # Import DocumentChunk model
+            from app.models.indexing import DocumentChunk
+
+            # Delete existing document chunks (FTS entries will be removed via triggers)
+            deleted_chunks = session.query(DocumentChunk).filter(
+                DocumentChunk.file_id == file_obj.id
+            ).delete()
+
+            if deleted_chunks > 0:
+                logger.info(f"Deleted {deleted_chunks} existing chunks for file: {file_obj.path}")
+
+            # Delete or reset existing Phase 4B jobs to allow recreation
+            phase4b_job_types = ["TEXT_EXTRACT", "CHUNK", "FTS_INDEX"]
+            for job_type in phase4b_job_types:
+                existing_jobs = session.query(IndexJob).filter(
+                    IndexJob.file_id == file_obj.id,
+                    IndexJob.job_type == job_type
+                ).all()
+
+                for job in existing_jobs:
+                    session.delete(job)
+                    logger.debug(f"Deleted existing {job_type} job for file: {file_obj.path}")
+
+            logger.info(f"Successfully cleaned up Phase 4B data for: {file_obj.path}")
+            # Note: No commit here - transaction management is handled by caller
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup Phase 4B data for {file_obj.path}: {e}")
+            raise
+
+    def _create_phase4b_jobs(self, session: Session, file_obj, force_recreate: bool = False) -> None:
+        """
+        Create Phase 4B follow-up jobs for a text file.
+
+        CRITICAL FIX: Removed internal commit/rollback to allow proper transaction management
+        by the caller. This ensures Phase 4B job creation is part of the same transaction as
+        parent job completion, preventing orphaned completed jobs without children.
+
+        Args:
+            session: Database session
+            file_obj: IndexedFile object
+            force_recreate: If True, create jobs even if they already exist
+        """
+        try:
             # Define Phase 4B job types in dependency order
             phase4b_jobs = ["TEXT_EXTRACT", "CHUNK", "FTS_INDEX"]
 
             for job_type in phase4b_jobs:
-                # Check if job already exists
-                existing_job = session.query(IndexJob).filter(
+                # Check if job already exists (unless forcing recreation)
+                existing_job = None if force_recreate else session.query(IndexJob).filter(
                     IndexJob.file_id == file_obj.id,
                     IndexJob.job_type == job_type
                 ).first()
@@ -829,11 +905,9 @@ class JobProcessor:
                 else:
                     logger.debug(f"Job {job_type} already exists for file: {file_obj.path}")
 
-            # Commit the new jobs
-            session.commit()
             logger.info(f"Successfully created Phase 4B jobs for: {file_obj.path}")
+            # Note: No commit here - transaction management is handled by caller
 
         except Exception as e:
             logger.error(f"Failed to create Phase 4B jobs for {file_obj.path}: {e}")
-            session.rollback()
             raise
