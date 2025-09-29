@@ -240,11 +240,16 @@ class ReindexService:
         Returns:
             Number of jobs created
         """
+        # Choose job type based on reindex mode
+        # Hard reset needs fresh index_file jobs (no existing data to clean)
+        # Soft reindex needs reindex_file jobs (incremental cleanup)
+        job_type = "index_file" if batch.mode == ReindexMode.HARD else "reindex_file"
+
         jobs = []
         for file_id in file_ids:
             job = IndexJob(
                 file_id=file_id,
-                job_type="reindex_file",
+                job_type=job_type,
                 batch_id=batch.id
             )
             jobs.append(job)

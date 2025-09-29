@@ -239,9 +239,26 @@ class JobQueueManager:
             # Mark job as completed
             job.mark_completed()
 
-            # Update the associated file
+            # Update the associated file - BUT only mark text files as indexed if they have chunks
             if job.file:
-                job.file.mark_indexed(index_version)
+                # For CHUNK jobs on text files, only mark as indexed if chunks were created
+                if job.job_type == "CHUNK" and job.file.is_text:
+                    # Import here to avoid circular imports
+                    from app.models.indexing import DocumentChunk
+
+                    # Check if this file has chunks
+                    chunk_count = session.query(DocumentChunk).filter(
+                        DocumentChunk.file_id == job.file.id
+                    ).count()
+
+                    if chunk_count > 0:
+                        job.file.mark_indexed(index_version)
+                        logger.debug(f"Marked text file {job.file.path} as indexed (has {chunk_count} chunks)")
+                    else:
+                        logger.warning(f"NOT marking text file {job.file.path} as indexed (no chunks created)")
+                else:
+                    # For non-CHUNK jobs or non-text files, mark as indexed normally
+                    job.file.mark_indexed(index_version)
 
             logger.debug(f"Completed job {job.id}")
             # Note: No commit here - transaction management is handled by caller
@@ -588,12 +605,24 @@ class JobProcessor:
                 if file_obj.is_text:
                     logger.warning(f"LlamaIndex extraction failed, falling back to simple read: {e}")
                     try:
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        with open(container_path, 'r', encoding='utf-8', errors='ignore') as f:
                             extracted_text = f.read()
                     except Exception as read_error:
                         raise ValueError(f"Both LlamaIndex and simple read failed: {e}, {read_error}")
                 else:
                     raise ValueError(f"Text extraction failed for binary file: {e}")
+
+            # CRITICAL FIX: Validate extraction results before marking complete
+            if not extracted_text or len(extracted_text.strip()) == 0:
+                # For text files, empty extraction is a failure
+                if file_obj.is_text:
+                    error_msg = f"TEXT_EXTRACT job failed: No text extracted from {file_obj.path}"
+                    logger.error(error_msg)
+                    self.queue_manager.fail_job(session, job, error_msg)
+                    return False
+                else:
+                    # For binary files, empty text might be expected
+                    logger.info(f"No text extracted from binary file {file_obj.path} (expected)")
 
             # Store extracted text in job_data
             job_data = {
@@ -607,10 +636,10 @@ class JobProcessor:
             job.job_data = json.dumps(job_data)
             session.commit()
 
-            # Mark job as completed
+            # Mark job as completed (only reached if text was extracted or binary file)
             self.queue_manager.complete_job(session, job, self.index_version)
 
-            logger.debug(f"Successfully extracted {len(extracted_text)} characters from: {file_obj.path}")
+            logger.info(f"Successfully extracted {len(extracted_text)} characters from: {file_obj.path}")
             return True
 
         except Exception as e:
@@ -723,10 +752,31 @@ class JobProcessor:
 
             session.commit()
 
-            # Mark job as completed
+            # CRITICAL FIX: Validate actual results before marking job complete
+            # Check total chunks for this file after processing
+            total_chunks = session.query(DocumentChunk).filter(
+                DocumentChunk.file_id == job.file_id
+            ).count()
+
+            if total_chunks == 0:
+                # No chunks exist for this file - this is a failure
+                error_msg = f"CHUNK job failed: No chunks created for {file_obj.path} (extracted_text_len={len(extracted_text)}, chunks_data_len={len(chunks_data)})"
+                logger.error(error_msg)
+                self.queue_manager.fail_job(session, job, error_msg)
+                return False
+
+            # Store result metadata in job_data for monitoring
+            result_data = {
+                "chunks_created": created_chunks,
+                "total_chunks": total_chunks,
+                "text_length": len(extracted_text)
+            }
+            job.job_data = json.dumps(result_data)
+
+            # Mark job as completed (only reached if chunks exist)
             self.queue_manager.complete_job(session, job, self.index_version)
 
-            logger.debug(f"Successfully created {created_chunks} chunks for: {file_obj.path}")
+            logger.info(f"Successfully processed chunks for {file_obj.path}: {total_chunks} total chunks ({created_chunks} newly created)")
             return True
 
         except Exception as e:

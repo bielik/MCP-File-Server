@@ -1129,15 +1129,15 @@ const IndexerDashboard: React.FC = () => {
             <h3 className="text-lg font-bold mb-4">Force Reindex</h3>
 
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-900">
                 Ready to start {reindexConfig.mode === 'soft' ? 'soft reindex' : 'hard reset'} on all files.
               </p>
 
               <div className="bg-gray-50 p-4 rounded-md">
-                <div className="text-sm">
+                <div className="text-sm text-gray-900">
                   <span className="font-medium">Mode:</span> {reindexConfig.mode === 'soft' ? 'Soft Reindex' : 'Hard Reset'}
                 </div>
-                <div className="text-sm mt-1">
+                <div className="text-sm mt-1 text-gray-900">
                   <span className="font-medium">Scope:</span> All files
                 </div>
               </div>
@@ -1154,7 +1154,7 @@ const IndexerDashboard: React.FC = () => {
               <div className="flex justify-end space-x-2 mt-6">
                 <button
                   onClick={() => setReindexModalOpen(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                  className="px-4 py-2 text-gray-900 bg-gray-200 rounded-md hover:bg-gray-300"
                 >
                   Cancel
                 </button>
@@ -1188,20 +1188,20 @@ const IndexerDashboard: React.FC = () => {
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Force Reindex Progress</h3>
             <div className="space-y-4">
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-900 mb-4">
                 Reindex in progress...
               </p>
 
               {reindexStatus && (
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-md space-y-2">
-                    <div className="text-sm">
+                    <div className="text-sm text-gray-900">
                       <span className="font-medium">Status:</span> {reindexStatus.status}
                     </div>
-                    <div className="text-sm">
+                    <div className="text-sm text-gray-900">
                       <span className="font-medium">Progress:</span> {reindexStatus.files_processed}/{reindexStatus.candidates_count} files
                     </div>
-                    <div className="text-sm">
+                    <div className="text-sm text-gray-900">
                       <span className="font-medium">Failed:</span> {reindexStatus.files_failed} files
                     </div>
                   </div>

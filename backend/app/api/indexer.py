@@ -202,14 +202,15 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
         text_files = session.query(IndexedFile).filter(IndexedFile.is_text == True).count()
         non_text_files = total_files - text_files
 
-        # Text file processing status
-        text_files_indexed = session.query(IndexedFile).filter(
+        # FIXED METRICS: Focus on actual results, not misleading job status
+
+        # Text files marked as "indexed" (potentially misleading - includes failures)
+        text_files_marked_indexed = session.query(IndexedFile).filter(
             IndexedFile.is_text == True,
             IndexedFile.is_indexed == True
         ).count()
-        text_files_pending = text_files - text_files_indexed
 
-        # Text files with actual chunks (fully processed)
+        # Text files with actual chunks (REAL success metric)
         text_files_with_chunks = (
             session.query(func.count(func.distinct(DocumentChunk.file_id)))
             .join(IndexedFile, DocumentChunk.file_id == IndexedFile.id)
@@ -217,24 +218,38 @@ async def get_indexer_status(session: Session = Depends(get_db)) -> IndexerStatu
             .scalar() or 0
         )
 
-        # Text files that were indexed but failed to create chunks
-        text_files_failed_processing = text_files_indexed - text_files_with_chunks
+        # Text files that failed processing (marked indexed but no chunks)
+        text_files_failed_processing = text_files_marked_indexed - text_files_with_chunks
+
+        # Text files not yet attempted (ensure non-negative)
+        text_files_pending = max(0, text_files - text_files_marked_indexed)
 
         file_stats = {
             "total_files": total_files,
             "discovered_files": discovered_files,
             "text_files": text_files,
             "non_text_files": non_text_files,
-            "text_files_indexed": text_files_indexed,
-            "text_files_pending": text_files_pending,
-            "text_files_with_chunks": text_files_with_chunks,
-            "text_files_failed_processing": text_files_failed_processing,
-            "text_processing_progress": (text_files_with_chunks / text_files * 100) if text_files > 0 else 100,
+
+            # REAL SUCCESS METRICS (based on actual chunks)
+            "text_files_with_chunks": text_files_with_chunks,  # PRIMARY success metric
+            "text_processing_progress": (text_files_with_chunks / text_files * 100) if text_files > 0 else 0,
+
+            # PROCESSING STATUS BREAKDOWN
+            "text_files_pending": text_files_pending,  # Not yet attempted
+            "text_files_failed_processing": text_files_failed_processing,  # Attempted but failed
+            "text_files_marked_indexed": text_files_marked_indexed,  # Marked as indexed (may include failures)
+
+            # CLARITY METRICS
+            "text_files_successfully_processed": text_files_with_chunks,  # Same as with_chunks but clearer name
+            "actual_success_rate": (text_files_with_chunks / text_files * 100) if text_files > 0 else 0,
+            "failure_rate": (text_files_failed_processing / text_files * 100) if text_files > 0 else 0,
+
             "discovery_progress": 100.0,  # All files discovered
-            # Keep old fields for backward compatibility
-            "indexed_files": text_files_indexed,  # This was misleading before
+
+            # DEPRECATED: Keep old fields for backward compatibility but mark as potentially misleading
+            "indexed_files": text_files_marked_indexed,  # DEPRECATED: Use text_files_successfully_processed instead
             "pending_files": text_files_pending,
-            "indexing_progress": (text_files_indexed / total_files * 100) if total_files > 0 else 100,
+            "indexing_progress": (text_files_marked_indexed / total_files * 100) if total_files > 0 else 100,  # DEPRECATED: May include failures
         }
 
         # Enhanced integrity checks
