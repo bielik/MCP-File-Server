@@ -191,16 +191,10 @@ class ReindexService:
                     DocumentChunk.file_id.in_(file_ids)
                 ).delete(synchronize_session=False)
 
-                # Delete pending/failed jobs for these files
+                # Delete ALL jobs for these files (not just pending/failed)
+                # This ensures a true hard reset with no leftover job history
                 jobs_deleted = self.session.query(IndexJob).filter(
-                    and_(
-                        IndexJob.file_id.in_(file_ids),
-                        IndexJob.status.in_([
-                            JobStatus.PENDING,
-                            JobStatus.FAILED,
-                            JobStatus.DEAD_LETTER
-                        ])
-                    )
+                    IndexJob.file_id.in_(file_ids)
                 ).delete(synchronize_session=False)
 
                 # Clear indexed flags
@@ -233,6 +227,9 @@ class ReindexService:
         """
         Create reindex jobs for given files.
 
+        TICKET 021 FIX: Now creates TEXT_EXTRACT jobs directly instead of parent jobs.
+        This eliminates the two-tier system and ensures consistent batch tracking.
+
         Args:
             batch: ReindexBatch instance
             file_ids: List of file IDs
@@ -240,10 +237,10 @@ class ReindexService:
         Returns:
             Number of jobs created
         """
-        # Choose job type based on reindex mode
-        # Hard reset needs fresh index_file jobs (no existing data to clean)
-        # Soft reindex needs reindex_file jobs (incremental cleanup)
-        job_type = "index_file" if batch.mode == ReindexMode.HARD else "reindex_file"
+        # TICKET 021: Always create TEXT_EXTRACT jobs directly for batch reindex
+        # This bypasses the legacy parent job system (index_file/reindex_file)
+        # Parent jobs are still used by the watcher for incremental operations
+        job_type = "TEXT_EXTRACT"
 
         jobs = []
         for file_id in file_ids:
@@ -269,11 +266,13 @@ class ReindexService:
         """
         Get detailed status of a reindex batch.
 
+        TICKET 021 STEP D: Enhanced with batch-scoped job type breakdown.
+
         Args:
             batch_id: Batch ID
 
         Returns:
-            Dictionary with batch status and metrics
+            Dictionary with batch status and metrics including job type breakdown
         """
         batch = self.session.query(ReindexBatch).filter(
             ReindexBatch.id == batch_id
@@ -282,7 +281,7 @@ class ReindexService:
         if not batch:
             return None
 
-        # Get job statistics
+        # Get job statistics by status
         job_stats = self.session.query(
             IndexJob.status,
             func.count(IndexJob.id).label('count')
@@ -293,6 +292,23 @@ class ReindexService:
         job_summary = {status.value: 0 for status in JobStatus}
         for stat in job_stats:
             job_summary[stat.status] = stat.count
+
+        # TICKET 021: Get job type breakdown for batch
+        job_type_stats = self.session.query(
+            IndexJob.job_type,
+            IndexJob.status,
+            func.count(IndexJob.id).label('count')
+        ).filter(
+            IndexJob.batch_id == batch_id
+        ).group_by(IndexJob.job_type, IndexJob.status).all()
+
+        # Organize by job type
+        job_type_breakdown = {}
+        for type_stat in job_type_stats:
+            job_type = type_stat.job_type
+            if job_type not in job_type_breakdown:
+                job_type_breakdown[job_type] = {status.value: 0 for status in JobStatus}
+            job_type_breakdown[job_type][type_stat.status] = type_stat.count
 
         # Calculate processing rate
         if batch.started_at and batch.status == BatchStatus.RUNNING:
@@ -307,6 +323,7 @@ class ReindexService:
         # Build response
         result = batch.to_dict()
         result['job_summary'] = job_summary
+        result['job_type_breakdown'] = job_type_breakdown  # TICKET 021: Added
         result['processing_rate'] = processing_rate
 
         # Add ETA if batch is running
@@ -325,6 +342,17 @@ class ReindexService:
                 )
             ).limit(5).all()
             result['recent_errors'] = [e.last_error for e in recent_errors if e.last_error]
+
+        # TICKET 021: Add consistency check (FTS should not exceed CHUNK)
+        chunk_completed = job_type_breakdown.get('CHUNK', {}).get(JobStatus.COMPLETED, 0)
+        fts_completed = job_type_breakdown.get('FTS_INDEX', {}).get(JobStatus.COMPLETED, 0)
+        result['consistency_check'] = {
+            'is_consistent': fts_completed <= chunk_completed,
+            'chunk_completed': chunk_completed,
+            'fts_completed': fts_completed,
+            'warning': None if fts_completed <= chunk_completed else
+                      f"FTS completed ({fts_completed}) exceeds CHUNK completed ({chunk_completed})"
+        }
 
         return result
 
@@ -475,3 +503,72 @@ class ReindexService:
         batches = query.order_by(ReindexBatch.created_at.desc()).limit(limit).all()
 
         return [batch.to_dict() for batch in batches]
+
+    def has_legacy_parent_jobs(self) -> bool:
+        """
+        Check if there are any legacy parent jobs in the system.
+
+        TICKET 021 STEP D: Detects presence of old-style parent jobs
+        (index_file/reindex_file) that were created before the fix.
+
+        Returns:
+            True if legacy parent jobs exist
+        """
+        count = self.session.query(IndexJob).filter(
+            IndexJob.job_type.in_(['index_file', 'reindex_file'])
+        ).count()
+
+        return count > 0
+
+    def full_reset(self) -> None:
+        """
+        Perform a complete reset of all indexing state.
+
+        TICKET 021 STEP B: Comprehensive reset that clears:
+        - All document chunks
+        - FTS virtual table data
+        - All index jobs (pending, failed, completed)
+        - Indexed file metadata (flags, timestamps)
+
+        This operation:
+        - Sets maintenance mode during execution
+        - Is fully transactional (rollback on failure)
+        - Clears maintenance mode on completion or error
+        """
+        logger.info("Starting full index reset")
+
+        try:
+            # Set maintenance mode
+            SystemFlag.set_maintenance_mode(self.session, True)
+            logger.info("Maintenance mode enabled for full reset")
+
+            # Delete all document chunks (FTS triggers will handle FTS cleanup)
+            chunks_deleted = self.session.query(DocumentChunk).delete()
+            logger.info(f"Deleted {chunks_deleted} document chunks")
+
+            # Delete all index jobs
+            jobs_deleted = self.session.query(IndexJob).delete()
+            logger.info(f"Deleted {jobs_deleted} index jobs")
+
+            # Clear indexed file metadata (but keep the files themselves)
+            files_updated = self.session.query(IndexedFile).update({
+                IndexedFile.is_indexed: False,
+                IndexedFile.last_indexed_at: None,
+                IndexedFile.index_version: None
+            })
+            logger.info(f"Reset metadata for {files_updated} indexed files")
+
+            # Commit the transaction
+            self.session.commit()
+            logger.info("Full reset completed successfully")
+
+        except Exception as e:
+            # Rollback on error
+            self.session.rollback()
+            logger.error(f"Full reset failed: {e}")
+            raise
+
+        finally:
+            # Always clear maintenance mode
+            SystemFlag.set_maintenance_mode(self.session, False)
+            logger.info("Maintenance mode disabled")

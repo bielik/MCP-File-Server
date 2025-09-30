@@ -103,6 +103,10 @@ class JobQueueManager:
         """
         Atomically claim a job for processing.
 
+        TICKET 021 STEP B: Checks maintenance mode before claiming jobs.
+        If maintenance mode is active, returns None to prevent processing
+        during reset operations.
+
         Uses atomic UPDATE with RETURNING for SQLite 3.35+ or fallback
         for older versions.
 
@@ -110,8 +114,16 @@ class JobQueueManager:
             session: Database session
 
         Returns:
-            Claimed IndexJob or None if no jobs available
+            Claimed IndexJob or None if no jobs available or maintenance mode active
         """
+        # Import SystemFlag here to avoid circular dependency
+        from models.reindex import SystemFlag
+
+        # TICKET 021: Check maintenance mode before claiming
+        if SystemFlag.is_maintenance_mode(session):
+            logger.debug("Maintenance mode active, skipping job claim")
+            return None
+
         try:
             # First try the atomic UPDATE...RETURNING approach (SQLite 3.35+)
             return self._claim_job_atomic(session)
@@ -652,6 +664,8 @@ class JobProcessor:
         """
         Process a CHUNK job by splitting text into manageable chunks.
 
+        TICKET 021 STEP E: Enhanced with structured logging.
+
         Args:
             session: Database session
             job: Chunking job
@@ -665,7 +679,11 @@ class JobProcessor:
         file_obj = job.file
 
         try:
-            logger.info(f"Chunking text for: {file_obj.path}")
+            # TICKET 021: Structured logging with batch context
+            logger.info(
+                f"Processing CHUNK job | file_id={file_obj.id} | "
+                f"batch_id={job.batch_id or 'none'} | path={file_obj.path}"
+            )
 
             # Get extracted text from job_data or previous TEXT_EXTRACT job
             extracted_text = None
@@ -771,6 +789,13 @@ class JobProcessor:
                 "total_chunks": total_chunks,
                 "text_length": len(extracted_text)
             }
+
+            # TICKET 021 STEP E: Structured logging for chunk creation
+            logger.info(
+                f"CHUNK complete | file_id={file_obj.id} | batch_id={job.batch_id or 'none'} | "
+                f"chunks_created={created_chunks} | text_bytes={len(extracted_text)} | "
+                f"path={file_obj.path}"
+            )
             job.job_data = json.dumps(result_data)
 
             # Mark job as completed (only reached if chunks exist)

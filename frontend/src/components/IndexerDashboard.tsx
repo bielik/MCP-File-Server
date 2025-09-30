@@ -100,6 +100,10 @@ const IndexerDashboard: React.FC = () => {
   const [reindexStatus, setReindexStatus] = useState<any>(null);
   const [reindexLoading, setReindexLoading] = useState(false);
 
+  // TICKET 021 STEP D: Legacy job warning state
+  const [hasLegacyJobs, setHasLegacyJobs] = useState(false);
+  const [legacyWarning, setLegacyWarning] = useState<string | null>(null);
+
   // Resolve API base URL (configurable)
   const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -142,6 +146,24 @@ const IndexerDashboard: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch recent jobs:', err);
+    }
+  };
+
+  // TICKET 021 STEP D: Check for legacy parent jobs
+  const checkLegacyJobs = async () => {
+    try {
+      const response = await fetch(`${apiBase}/admin/reindex/status`, {
+        headers: {
+          'X-Admin-Key': 'admin-secret-key-change-me' // This should be from config
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setHasLegacyJobs(data.has_legacy_parent_jobs || false);
+        setLegacyWarning(data.legacy_warning || null);
+      }
+    } catch (err) {
+      console.error('Failed to check legacy jobs:', err);
     }
   };
 
@@ -378,6 +400,7 @@ const IndexerDashboard: React.FC = () => {
         fetchStatus(),
         fetchRecentFiles(),
         fetchRecentJobs(),
+        checkLegacyJobs(), // TICKET 021: Check for legacy jobs
       ]);
       setLoading(false);
     };
@@ -391,9 +414,13 @@ const IndexerDashboard: React.FC = () => {
       fetchRecentFiles();
       fetchRecentJobs();
     }, 15000);
+    // Check legacy jobs less frequently (every 30 seconds)
+    const legacyInterval = setInterval(checkLegacyJobs, 30000);
+
     return () => {
       clearInterval(statusInterval);
       clearInterval(listsInterval);
+      clearInterval(legacyInterval);
     };
   }, []);
 
@@ -563,6 +590,27 @@ const IndexerDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6" data-testid="indexer-dashboard">
+      {/* TICKET 021 STEP D: Legacy Job Warning Banner */}
+      {hasLegacyJobs && legacyWarning && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-blue-800">
+                Legacy Job Detection
+              </h3>
+              <div className="mt-2 text-sm text-blue-700">
+                <p>{legacyWarning}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status Header */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <div className="flex items-center justify-between">

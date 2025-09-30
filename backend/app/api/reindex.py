@@ -370,11 +370,14 @@ async def get_reindex_status(
     """
     Get overall reindex system status.
 
+    TICKET 021 STEP D: Enhanced with legacy job detection.
+
     Returns:
-        System status including active batches and maintenance mode
+        System status including active batches, maintenance mode, and legacy job warning
     """
     try:
         from app.models.reindex import ReindexBatch, SystemFlag
+        from app.services.reindex_service import ReindexService
 
         # Check for active batch
         active_batch = ReindexBatch.get_active_batch(session)
@@ -382,11 +385,17 @@ async def get_reindex_status(
         # Check maintenance mode
         maintenance_mode = SystemFlag.is_maintenance_mode(session)
 
+        # TICKET 021: Check for legacy parent jobs
+        service = ReindexService(session)
+        has_legacy_jobs = service.has_legacy_parent_jobs()
+
         return {
             "has_active_batch": active_batch is not None,
             "active_batch_id": active_batch.id if active_batch else None,
             "active_batch_status": active_batch.status if active_batch else None,
-            "maintenance_mode": maintenance_mode
+            "maintenance_mode": maintenance_mode,
+            "has_legacy_parent_jobs": has_legacy_jobs,  # TICKET 021: Added
+            "legacy_warning": "Legacy parent jobs (index_file/reindex_file) detected. Dashboard metrics show only core-stage jobs." if has_legacy_jobs else None
         }
 
     except Exception as e:
@@ -421,3 +430,55 @@ async def clear_maintenance_mode(
     except Exception as e:
         logger.error(f"Failed to clear maintenance mode: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear maintenance mode: {e}")
+
+
+@router.post("/full-reset-now")
+async def full_reset_now(
+    session: Session = Depends(get_db),
+    is_admin: bool = Depends(verify_admin_access)
+) -> Dict[str, Any]:
+    """
+    Perform a complete reset of all indexing state.
+
+    TICKET 021 STEP B: Full reset endpoint that:
+    - Sets maintenance mode during execution
+    - Clears all document chunks and FTS data
+    - Removes all index jobs
+    - Resets indexed file metadata
+    - Is fully transactional with rollback on failure
+    - Automatically clears maintenance mode on completion
+
+    This is a destructive operation that should only be used when
+    you want to rebuild the entire index from scratch.
+
+    Returns:
+        Operation result with statistics
+    """
+    try:
+        service = ReindexService(session)
+
+        # Collect stats before reset for reporting
+        from app.models.indexing import DocumentChunk, IndexJob, IndexedFile
+        chunks_before = session.query(DocumentChunk).count()
+        jobs_before = session.query(IndexJob).count()
+        files_before = session.query(IndexedFile).count()
+
+        # Perform the reset
+        service.full_reset()
+
+        logger.info("Full index reset completed successfully via API")
+
+        return {
+            "success": True,
+            "message": "Full index reset completed successfully",
+            "statistics": {
+                "chunks_deleted": chunks_before,
+                "jobs_deleted": jobs_before,
+                "files_reset": files_before,
+                "maintenance_mode_cleared": True
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to perform full reset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to perform full reset: {e}")
