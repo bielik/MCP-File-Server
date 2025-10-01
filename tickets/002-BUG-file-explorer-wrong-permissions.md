@@ -2,7 +2,7 @@
 
 **Priority:** High
 **Component:** Frontend - File Explorer
-**Status:** Open
+**Status:** Closed (2025-10-01)
 **Reporter:** User Investigation
 **Created:** 2025-09-18
 

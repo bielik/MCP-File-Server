@@ -2,7 +2,7 @@
 
 **Type:** Bug
 **Priority:** Medium
-**Status:** Open
+**Status:** Closed (2025-10-01)
 **Created:** 2025-09-29
 
 ## Summary

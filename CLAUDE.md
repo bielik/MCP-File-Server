@@ -21,6 +21,8 @@ Phase 4B Milestone 2 delivers production-ready full-text search capabilities usi
 - 🧪 Comprehensive Testing: 49+ test methods with 100% TDD compliance
 - 🚀 Performance: Sub-350ms search response times with O(1) permission filtering
 - 📖 Production Ready: 2,400+ lines of tested code with comprehensive error handling
+- 🧹 Hard reset now drops orphaned file records and rebuilds the Phase 4B FTS tables before enqueuing jobs, preventing stale paths from reappearing.
+- ♻️ Queue processor reuses existing CHUNK/FTS jobs after text extraction so duplicate signatures no longer occur; use `POST /control/resume` or restart the indexer to refresh dashboard counters after large resets.
 
 **Phase 4B M1 (Foundation - ✅ COMPLETE):**
 - 📊 Database Schema Extended: DocumentChunk model with 13 fields for text chunk management
@@ -116,10 +118,11 @@ The system follows a **"Unified Hub"** architecture - a single, persistent backe
 ```
 
 ## Working Directory Structure
-**Shared Filesystem:** `C:/Users/MartinBielik/MCP Test/` (mounted to `/source`)
-- `materials/` - Read-only access (course materials and documentation)
-- `projects/` - Read-write access (development projects and code)
-- `private stuff/` - No access (default deny)
+**Shared Filesystem:** `./shared-fs/` (mounted to `/source` in containers)
+- `docs/` - Documentation and reference materials
+- `projects/` - Development projects and code
+- `output/` - Generated outputs
+- `tests_hard_reset/` - Test files for reset operations
 
 ## Development Workflow
 
@@ -141,7 +144,7 @@ BACKEND_PORT=8000
 FRONTEND_PORT=5173
 INDEXER_PORT=8002
 DATABASE_PATH=./data
-SHARED_FS_PATH=C:/Users/MartinBielik/MCP Test
+SHARED_FS_PATH=./shared-fs
 ENABLE_DATABASE_PERMISSIONS=true
 ```
 

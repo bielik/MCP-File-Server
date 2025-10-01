@@ -35,39 +35,62 @@ class DatabaseBootstrap:
         """
         Configure SQLite PRAGMAs for optimal concurrent performance.
 
-        This function is called automatically when SQLite connections are created.
-        It applies the following optimizations:
-        - WAL mode for better read/write concurrency
-        - NORMAL synchronous mode for performance
-        - Foreign key constraints enabled
-        - Busy timeout to handle concurrent access
+        This function attempts to enable WAL and other optimizations, but will
+        gracefully degrade when the underlying filesystem does not support them
+        (e.g., Docker Desktop on Windows with mounted volumes).
         """
         cursor = dbapi_connection.cursor()
 
         try:
-            # Enable WAL (Write-Ahead Logging) mode for better concurrency
-            cursor.execute("PRAGMA journal_mode=WAL")
+            import os
 
-            # Set synchronous mode to NORMAL for performance
-            # This is safe with WAL mode
-            cursor.execute("PRAGMA synchronous=NORMAL")
+            wal_requested = os.getenv("DB_WAL_MODE", "true").lower() not in {"0", "false", "no", "off"}
+            wal_enabled = False
 
-            # Set busy timeout to handle concurrent access
-            cursor.execute("PRAGMA busy_timeout=5000")
+            if wal_requested:
+                try:
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    result = cursor.fetchone()
+                    wal_enabled = bool(result and str(result[0]).lower() == "wal")
+                    logger.info("SQLite journal mode set to %s", result[0] if result else "unknown")
+                except sqlite3.OperationalError as exc:
+                    logger.warning("Unable to enable WAL journal mode: %s; continuing without WAL", exc)
+                except sqlite3.Error as exc:
+                    logger.warning("SQLite error while enabling WAL journal mode: %s", exc)
+                except Exception as exc:
+                    logger.warning("Unexpected error while enabling WAL journal mode: %s", exc)
+            else:
+                logger.info("DB_WAL_MODE disabled by configuration; preserving existing journal mode")
 
-            # Enable foreign key constraints
-            cursor.execute("PRAGMA foreign_keys=ON")
+            pragma_statements = [
+                "PRAGMA synchronous=NORMAL",
+                "PRAGMA busy_timeout=5000",
+                "PRAGMA foreign_keys=ON",
+                "PRAGMA cache_size=10000",
+                "PRAGMA temp_store=MEMORY",
+                "PRAGMA mmap_size=268435456",
+            ]
 
-            # Optimize for performance
-            cursor.execute("PRAGMA cache_size=10000")  # 10MB cache
-            cursor.execute("PRAGMA temp_store=MEMORY")  # Use memory for temp tables
-            cursor.execute("PRAGMA mmap_size=268435456")  # 256MB memory-mapped I/O
+            for statement in pragma_statements:
+                try:
+                    cursor.execute(statement)
+                except sqlite3.OperationalError as exc:
+                    logger.warning("SQLite PRAGMA %s skipped: %s", statement, exc)
+                except sqlite3.Error as exc:
+                    logger.warning("SQLite PRAGMA %s failed: %s", statement, exc)
+                except Exception as exc:
+                    logger.warning("SQLite PRAGMA %s raised unexpected error: %s", statement, exc)
 
-            logger.info("SQLite PRAGMAs configured for concurrent access")
+            if not wal_requested or not wal_enabled:
+                try:
+                    cursor.execute("PRAGMA journal_mode")
+                    result = cursor.fetchone()
+                    logger.info("SQLite journal mode remains %s", result[0] if result else "unknown")
+                except sqlite3.Error as exc:
+                    logger.debug("Unable to read journal mode: %s", exc)
 
-        except Exception as e:
-            logger.error(f"Failed to configure SQLite PRAGMAs: {e}")
-            raise
+            logger.info("SQLite PRAGMAs configured (WAL enabled: %s)", wal_enabled)
+
         finally:
             cursor.close()
 

@@ -119,6 +119,10 @@ python scripts/trigger_reindex.py system
 python scripts/trigger_reindex.py clear-maintenance
 ```
 
+> **Update – 2025-09-30:** Hard reset now prunes database records for files that no longer exist on the shared filesystem, rebuilds the Phase 4B FTS tables, and then enqueues fresh TEXT_EXTRACT jobs. This prevents stale jobs from resurfacing deleted paths.
+>
+> **Tip:** After a large hard reset, if the indexer dashboard still reports processing jobs even though the queue is empty, restart the indexer container or send POST /control/resume to refresh the status payload.
+
 #### API Integration
 
 Force Reindex operations can be integrated into automation workflows via REST API:
@@ -233,6 +237,44 @@ The ChatGPT integration requires **3 running processes**:
 1. **Docker Compose** (your main MCP server) - Port 8000
 2. **Proxy Server** (`python chatgpt_proxy.py`) - Port 9000
 3. **Tunnel Process** (`npx localtunnel --port XXXX`) - Creates public URL
+
+### Troubleshooting Indexer & FTS
+
+- **FTS5 reports `invalid file format (found 0, expected 4 or 5)`** - drop and recreate the `chunks_fts` virtual table, then rebuild the index:
+  ```bash
+  python - <<'PY'
+  import sqlite3
+  conn = sqlite3.connect('data/database.db')
+  cur = conn.cursor()
+  cur.executescript("""
+    DROP TRIGGER IF EXISTS chunks_fts_insert;
+    DROP TRIGGER IF EXISTS chunks_fts_update;
+    DROP TRIGGER IF EXISTS chunks_fts_delete;
+    DROP TABLE IF EXISTS chunks_fts;
+    CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        text,
+        content='document_chunks',
+        content_rowid='id',
+        tokenize='trigram'
+    );
+    CREATE TRIGGER chunks_fts_insert AFTER INSERT ON document_chunks BEGIN
+        INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER chunks_fts_update AFTER UPDATE ON document_chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+        INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER chunks_fts_delete AFTER DELETE ON document_chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+    END;
+    INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild');
+  """)
+  conn.commit()
+  conn.close()
+  PY
+  ```
+- **Dashboard shows processing jobs even though the queue is empty** - call `POST /control/resume` or restart the indexer container to refresh the cached queue statistics. The database view (`SELECT status, COUNT(*) FROM index_jobs GROUP BY status`) is the source of truth.
+- **Phase 4B jobs requeue repeatedly** - ensure the indexer service is on the latest build with the queue fixes (TEXT_EXTRACT now reuses existing CHUNK/FTS jobs). Clear any dead-letter entries with `UPDATE index_jobs SET status='pending' ...` before restarting the worker.
 
 ### Troubleshooting Connection Issues
 

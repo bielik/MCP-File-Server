@@ -255,8 +255,6 @@ class JobQueueManager:
             if job.file:
                 # For CHUNK jobs on text files, only mark as indexed if chunks were created
                 if job.job_type == "CHUNK" and job.file.is_text:
-                    # Import here to avoid circular imports
-                    from app.models.indexing import DocumentChunk
 
                     # Check if this file has chunks
                     chunk_count = session.query(DocumentChunk).filter(
@@ -646,10 +644,45 @@ class JobProcessor:
 
             # Update job with extracted data
             job.job_data = json.dumps(job_data)
-            session.commit()
+            session.flush()
+
+            # TICKET 021 FIX: Reuse or create CHUNK job without violating job_signature
+            if extracted_text and extracted_text.strip():
+                chunk_job = session.query(IndexJob).filter(
+                    IndexJob.file_id == job.file_id,
+                    IndexJob.job_type == "CHUNK",
+                    IndexJob.batch_id == job.batch_id
+                ).first()
+
+                if chunk_job:
+                    chunk_job.job_data = job.job_data
+                    chunk_job.reset_for_retry()
+                    chunk_job.retry_count = 0
+                    chunk_job.next_retry_at = None
+                    chunk_job.last_error = None
+                    chunk_job.completed_at = None
+                    logger.info(
+                        f"Reset existing CHUNK job | file_id={job.file_id} | "
+                        f"batch_id={job.batch_id or 'none'} | path={file_obj.path}"
+                    )
+                else:
+                    chunk_job = IndexJob(
+                        file_id=job.file_id,
+                        job_type="CHUNK",
+                        batch_id=job.batch_id,
+                        job_data=job.job_data
+                    )
+                    session.add(chunk_job)
+                    logger.info(
+                        f"Created CHUNK job | file_id={job.file_id} | "
+                        f"batch_id={job.batch_id or 'none'} | path={file_obj.path}"
+                    )
+
+                session.flush()
 
             # Mark job as completed (only reached if text was extracted or binary file)
             self.queue_manager.complete_job(session, job, self.index_version)
+            session.commit()
 
             logger.info(f"Successfully extracted {len(extracted_text)} characters from: {file_obj.path}")
             return True
@@ -797,9 +830,43 @@ class JobProcessor:
                 f"path={file_obj.path}"
             )
             job.job_data = json.dumps(result_data)
+            # TICKET 021 FIX: Ensure FTS_INDEX job is ready for next stage without duplicates
+            if total_chunks > 0:
+                fts_job = session.query(IndexJob).filter(
+                    IndexJob.file_id == job.file_id,
+                    IndexJob.job_type == "FTS_INDEX",
+                    IndexJob.batch_id == job.batch_id
+                ).first()
+
+                if fts_job:
+                    fts_job.job_data = job.job_data
+                    fts_job.reset_for_retry()
+                    fts_job.retry_count = 0
+                    fts_job.next_retry_at = None
+                    fts_job.last_error = None
+                    fts_job.completed_at = None
+                    logger.info(
+                        f"Reset existing FTS_INDEX job | file_id={job.file_id} | "
+                        f"batch_id={job.batch_id or 'none'} | path={file_obj.path}"
+                    )
+                else:
+                    fts_job = IndexJob(
+                        file_id=job.file_id,
+                        job_type="FTS_INDEX",
+                        batch_id=job.batch_id,
+                        job_data=job.job_data
+                    )
+                    session.add(fts_job)
+                    logger.info(
+                        f"Created FTS_INDEX job | file_id={job.file_id} | "
+                        f"batch_id={job.batch_id or 'none'} | path={file_obj.path}"
+                    )
+
+                session.flush()
 
             # Mark job as completed (only reached if chunks exist)
             self.queue_manager.complete_job(session, job, self.index_version)
+            session.commit()
 
             logger.info(f"Successfully processed chunks for {file_obj.path}: {total_chunks} total chunks ({created_chunks} newly created)")
             return True
@@ -854,6 +921,7 @@ class JobProcessor:
 
             # Mark job as completed
             self.queue_manager.complete_job(session, job, self.index_version)
+            session.commit()
 
             logger.debug(f"Successfully FTS indexed {len(chunks)} chunks for: {file_obj.path}")
             return True
@@ -914,16 +982,15 @@ class JobProcessor:
             file_obj: IndexedFile object
         """
         try:
-            # Import DocumentChunk model
-            from app.models.indexing import DocumentChunk
-
             # Delete existing document chunks (FTS entries will be removed via triggers)
             deleted_chunks = session.query(DocumentChunk).filter(
                 DocumentChunk.file_id == file_obj.id
             ).delete()
 
+            modifications_made = False
             if deleted_chunks > 0:
                 logger.info(f"Deleted {deleted_chunks} existing chunks for file: {file_obj.path}")
+                modifications_made = True
 
             # Delete or reset existing Phase 4B jobs to allow recreation
             phase4b_job_types = ["TEXT_EXTRACT", "CHUNK", "FTS_INDEX"]
@@ -935,7 +1002,11 @@ class JobProcessor:
 
                 for job in existing_jobs:
                     session.delete(job)
+                    modifications_made = True
                     logger.debug(f"Deleted existing {job_type} job for file: {file_obj.path}")
+
+            if modifications_made:
+                session.flush()
 
             logger.info(f"Successfully cleaned up Phase 4B data for: {file_obj.path}")
             # Note: No commit here - transaction management is handled by caller

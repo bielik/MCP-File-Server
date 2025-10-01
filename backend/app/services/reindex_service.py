@@ -6,7 +6,9 @@ including soft reindex (clear flags) and hard reset (purge and rebuild).
 """
 
 import logging
-from typing import List, Optional, Dict, Any
+import os
+from pathlib import Path
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 from sqlalchemy import func, and_, or_, delete
 from sqlalchemy.orm import Session
@@ -32,6 +34,7 @@ class ReindexService:
             session: Database session
         """
         self.session = session
+        self._shared_fs_root: Optional[Path] = None
 
     def create_batch(
         self,
@@ -137,6 +140,90 @@ class ReindexService:
 
         return query.all()
 
+    def _resolve_shared_fs_root(self) -> Optional[Path]:
+        """Locate the shared filesystem root for path existence checks."""
+        if self._shared_fs_root is not None:
+            return self._shared_fs_root
+
+        try:
+            from app.config import get_config
+
+            config = get_config()
+            candidate = Path(config.SHARED_FS_PATH)
+        except Exception as exc:
+            logger.warning(
+                "Skipping missing-file pruning during reindex; configuration unavailable: %s",
+                exc,
+            )
+            self._shared_fs_root = None
+            return None
+
+        search_paths = [candidate]
+
+        # Phase 4B containers mount the host share at /source regardless of .env
+        # settings. Fall back to /source (or a custom SOURCE_MOUNT_PATH override)
+        # whenever the configured path is missing so pruning still works inside
+        # Docker.
+        fallback_env = os.getenv("SOURCE_MOUNT_PATH")
+        if fallback_env:
+            search_paths.append(Path(fallback_env))
+        search_paths.append(Path('/source'))
+
+        for path in search_paths:
+            if path and path.exists():
+                if path != candidate:
+                    logger.info(
+                        "Shared filesystem root %s not found, using fallback %s",
+                        candidate,
+                        path,
+                    )
+                self._shared_fs_root = path
+                return self._shared_fs_root
+
+        logger.warning(
+            "Shared filesystem root %s is not accessible; skipping missing-file pruning.",
+            candidate,
+        )
+        self._shared_fs_root = None
+        return self._shared_fs_root
+
+    def _prune_missing_files(self, files: List[IndexedFile]) -> Tuple[List[IndexedFile], int]:
+        """Remove database records for files that no longer exist on disk."""
+        if not files:
+            return files, 0
+
+        shared_root = self._resolve_shared_fs_root()
+        if not shared_root:
+            return files, 0
+
+        existing_files: List[IndexedFile] = []
+        missing_ids: List[int] = []
+
+        for file in files:
+            file_path = shared_root / Path(file.path)
+            if file_path.exists():
+                existing_files.append(file)
+            else:
+                missing_ids.append(file.id)
+
+        if missing_ids:
+            logger.info(
+                "Pruning %d missing files before hard reset",
+                len(missing_ids),
+            )
+            self.session.query(DocumentChunk).filter(
+                DocumentChunk.file_id.in_(missing_ids)
+            ).delete(synchronize_session=False)
+            self.session.query(IndexJob).filter(
+                IndexJob.file_id.in_(missing_ids)
+            ).delete(synchronize_session=False)
+            self.session.query(IndexedFile).filter(
+                IndexedFile.id.in_(missing_ids)
+            ).delete(synchronize_session=False)
+            self.session.flush()
+
+        return existing_files, len(missing_ids)
+
     def _execute_soft_reindex(self, batch: ReindexBatch, files: List[IndexedFile]) -> None:
         """
         Execute soft reindex - clear indexed flags and create jobs.
@@ -177,6 +264,14 @@ class ReindexService:
             batch: ReindexBatch instance
             files: List of files to reindex
         """
+        files, pruned_count = self._prune_missing_files(files)
+        if pruned_count:
+            batch.candidates_count = len(files)
+            logger.info(
+                "Hard reset will operate on %d files after pruning missing entries",
+                len(files),
+            )
+
         logger.info(f"Executing hard reset for {len(files)} files")
 
         # Process in chunks for memory efficiency
@@ -322,9 +417,13 @@ class ReindexService:
 
         # Build response
         result = batch.to_dict()
+        # Align API payload with BatchStatusResponse schema
+        result['batch_id'] = result.pop('id')
         result['job_summary'] = job_summary
         result['job_type_breakdown'] = job_type_breakdown  # TICKET 021: Added
         result['processing_rate'] = processing_rate
+        result['eta_seconds'] = None
+        result.setdefault('recent_errors', None)
 
         # Add ETA if batch is running
         if batch.status == BatchStatus.RUNNING and processing_rate > 0:
@@ -541,6 +640,14 @@ class ReindexService:
             # Set maintenance mode
             SystemFlag.set_maintenance_mode(self.session, True)
             logger.info("Maintenance mode enabled for full reset")
+
+            all_files = self.session.query(IndexedFile).all()
+            _, pruned_count = self._prune_missing_files(all_files)
+            if pruned_count:
+                logger.info(
+                    "Full reset pruned %d IndexedFile records for missing files",
+                    pruned_count,
+                )
 
             # Delete all document chunks (FTS triggers will handle FTS cleanup)
             chunks_deleted = self.session.query(DocumentChunk).delete()

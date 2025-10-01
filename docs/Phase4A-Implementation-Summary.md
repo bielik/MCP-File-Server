@@ -315,7 +315,7 @@ indexer:
   volumes:
     - ./data:/data                  # Shared database
     - ./config:/config              # Configuration
-    - "C:/Users/MartinBielik/MCP Test/:/source"  # Source files
+    - ./shared-fs:/source           # Source files
   environment:
     - DATABASE_PATH=./data
     - SOURCE_MOUNT_PATH=/source

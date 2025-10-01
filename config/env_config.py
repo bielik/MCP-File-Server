@@ -459,7 +459,7 @@ INDEXER_PORT=8002
 
 # File system paths
 DATABASE_PATH=./data
-SHARED_FS_PATH=C:/Users/MartinBielik/MCP Test
+SHARED_FS_PATH=./shared-fs
 
 # ============================================================================
 # Advanced Settings

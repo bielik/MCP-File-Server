@@ -233,8 +233,10 @@ Given that Steps A and B fix the **core architectural problem** (dual pipeline c
 
 **The system is now in a stable state where:**
 - Batch reindex operations use the correct single-tier pipeline
+- Hard resets prune missing filesystem entries and rebuild Phase 4B FTS tables before jobs queue.
 - Full reset capability available for recovery scenarios
 - Maintenance mode prevents worker interference
+- Dashboard stats refresh after /control/resume or an indexer restart, keeping operators in sync with the database.
 - All changes are fully tested and backward compatible
 
 *Steps C, D, and E can be implemented incrementally without blocking production deployment of the core fixes.*

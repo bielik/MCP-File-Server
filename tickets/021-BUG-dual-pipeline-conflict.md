@@ -1,10 +1,10 @@
-# Ticket 021: Dual Pipeline Conflict - Old and New Indexing Systems Running Simultaneously
+﻿# Ticket 021: Dual Pipeline Conflict - Old and New Indexing Systems Running Simultaneously
 
 **Type:** BUG
 **Priority:** CRITICAL
 **Component:** Indexer Service
 **Created:** 2025-01-30
-**Status:** Open
+**Status:** Resolved (2025-09-30)
 
 # MCP KnowledgeExplorer — Indexing Pipeline Report (Ticket 021)
 
@@ -13,6 +13,8 @@ Audience: Backend, Indexer, and Frontend teams
 Scope: Collapse two-tier reindex into a **single, deterministic Hard Reindex**, fix pipeline contradictions, and align monitoring & tests.
 
 ---
+
+> **2025-09-30 Update:** Implemented hard-reset pruning of missing files, automatic Phase 4B job reuse, and an FTS rebuild procedure. Force Reindex now enqueues only core stage jobs with fresh batch IDs, and the dashboard reflects the new counts after an indexer restart or `/control/resume`.
 
 ## 1) Problem (short)
 

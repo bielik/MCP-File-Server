@@ -176,6 +176,7 @@ headers.txt
 
 # Test data files
 shared-fs/docs/test*.txt
+shared-fs/*
 
 # Development artifacts
 PHASE4_IMPLEMENTATION_PLAN.md

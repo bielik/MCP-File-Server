@@ -57,12 +57,29 @@ class FileStabilityTracker:
         """
         try:
             stat = os.stat(file_path)
+            current_time = time.time()
+            existing = self.pending_files.get(file_path)
+
+            if existing:
+                if stat.st_mtime == existing['mtime'] and stat.st_size == existing['size']:
+                    logger.debug(f"File unchanged since tracking started, keeping stability: {file_path}")
+                    existing['last_check'] = current_time
+                    return
+
+                existing['size'] = stat.st_size
+                existing['mtime'] = stat.st_mtime
+                existing['checks_passed'] = 0
+                existing['last_check'] = current_time
+                existing.setdefault('first_seen', current_time)
+                logger.debug(f"File changed while tracking, resetting stability: {file_path}")
+                return
+
             self.pending_files[file_path] = {
-                'last_check': time.time(),
+                'last_check': current_time,
                 'checks_passed': 0,
                 'size': stat.st_size,
                 'mtime': stat.st_mtime,
-                'first_seen': time.time()
+                'first_seen': current_time
             }
             logger.debug(f"Added file to stability tracking: {file_path}")
         except OSError as e:

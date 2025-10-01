@@ -691,6 +691,11 @@ The implementation delivers a production-ready, secure, and high-performance ful
 - **Integration**: Seamless MCP protocol integration as 8th tool
 - **Quality**: 49+ test methods with 100% TDD compliance
 
+## 2025-09-30 Validation
+- Hard reset now prunes missing filesystem records and rebuilds the Phase 4B FTS tables before Phase 4B jobs are enqueued.
+- Queue processor reuses existing CHUNK/FTS jobs after TEXT_EXTRACT, eliminating duplicate signatures and dead-letter retries.
+- Runbooks now include `/control/resume` (or an indexer restart) after large resets to refresh dashboard counters.
+
 *M2 implementation completed: 2025-01-24*
 *Critical post-review fixes applied: 2025-01-24*
 *Post-M2 operational issues resolved: 2025-01-25*
